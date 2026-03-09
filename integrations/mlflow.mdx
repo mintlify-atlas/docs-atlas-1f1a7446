@@ -1,0 +1,507 @@
+---
+title: MLflow Integration
+description: Track experiments and manage models with MLflow
+---
+
+The MLflow integration provides experiment tracking, model registry, and model deployment capabilities using the popular open-source MLflow platform.
+
+## Installation
+
+```bash
+pip install "zenml[mlflow]"
+```
+
+This installs:
+- `mlflow>=2.1.1,<4` - MLflow tracking and models
+- `numpy` - Numerical computing (MLflow dependency)
+- `pandas` - Data manipulation (MLflow dependency)
+
+## Available Components
+
+The MLflow integration provides these stack components:
+
+<CardGroup cols={2}>
+  <Card title="MLflow Experiment Tracker" icon="chart-line">
+    Track experiments, metrics, and parameters
+  </Card>
+  <Card title="MLflow Model Registry" icon="database">
+    Manage model versions and lifecycle
+  </Card>
+  <Card title="MLflow Model Deployer" icon="rocket">
+    Deploy models as REST endpoints
+  </Card>
+</CardGroup>
+
+## MLflow Experiment Tracker
+
+Track experiments and log metrics, parameters, and artifacts to MLflow.
+
+### Configuration
+
+**Local Tracking:**
+
+```bash
+# Uses local file storage
+zenml experiment-tracker register mlflow-local \
+    --flavor=mlflow
+```
+
+**Remote Tracking Server:**
+
+```bash
+zenml experiment-tracker register mlflow-remote \
+    --flavor=mlflow \
+    --tracking_uri=https://mlflow.mycompany.com \
+    --tracking_username=admin \
+    --tracking_password=secretpass
+```
+
+**Databricks:**
+
+```bash
+zenml experiment-tracker register mlflow-databricks \
+    --flavor=mlflow \
+    --tracking_uri=databricks \
+    --databricks_host=https://myworkspace.cloud.databricks.com
+```
+
+**Configuration Parameters:**
+- `tracking_uri` - MLflow tracking server URL (default: uses artifact store)
+- `tracking_username` - Username for authentication
+- `tracking_password` - Password for authentication
+- `tracking_token` - Token for authentication (alternative to username/password)
+- `tracking_insecure_tls` - Skip TLS verification (default: `False`)
+- `databricks_host` - Databricks workspace URL (when `tracking_uri=databricks`)
+- `experiment_name` - Default experiment name
+
+### Usage in Steps
+
+**Autologging (Recommended):**
+
+```python
+from zenml import step, pipeline
+import mlflow
+
+@step(experiment_tracker="mlflow-tracker")
+def train_model(data: pd.DataFrame) -> Model:
+    # Enable autologging for your framework
+    mlflow.sklearn.autolog()  # or mlflow.tensorflow.autolog(), etc.
+    
+    model = RandomForestClassifier()
+    model.fit(X_train, y_train)
+    
+    # Autologging captures parameters, metrics, and the model
+    return model
+```
+
+**Manual Logging:**
+
+```python
+from zenml import step
+from zenml.client import Client
+
+experiment_tracker = Client().active_stack.experiment_tracker
+
+@step(experiment_tracker="mlflow-tracker")
+def train_model(data: pd.DataFrame) -> Model:
+    # Log parameters
+    experiment_tracker.log_params({
+        "learning_rate": 0.001,
+        "n_estimators": 100,
+        "max_depth": 5,
+    })
+    
+    # Training loop
+    for epoch in range(100):
+        loss = train_epoch(model, data)
+        accuracy = evaluate(model, val_data)
+        
+        # Log metrics per epoch
+        experiment_tracker.log_metrics(
+            {"loss": loss, "accuracy": accuracy},
+            step=epoch
+        )
+    
+    # Log artifacts
+    experiment_tracker.log_artifact("model.pkl")
+    
+    return model
+```
+
+**Using MLflow Client Directly:**
+
+```python
+import mlflow
+from zenml import step
+
+@step(experiment_tracker="mlflow-tracker")
+def train_model() -> Model:
+    # MLflow context is automatically set up
+    mlflow.log_param("learning_rate", 0.001)
+    mlflow.log_metric("accuracy", 0.95)
+    mlflow.log_artifact("plots/confusion_matrix.png")
+    
+    # Log model
+    mlflow.sklearn.log_model(model, "model")
+    
+    return model
+```
+
+### Experiment Organization
+
+**Set Experiment Name:**
+
+```python
+from zenml import step
+from zenml.integrations.mlflow.flavors.mlflow_experiment_tracker_flavor import (
+    MLFlowExperimentTrackerSettings,
+)
+
+@step(
+    experiment_tracker="mlflow-tracker",
+    settings={
+        "experiment_tracker": MLFlowExperimentTrackerSettings(
+            experiment_name="recommendation-model-v2",
+            tags={"team": "ml-ops", "project": "recommendations"},
+        )
+    },
+)
+def train_model() -> Model:
+    ...
+```
+
+**Nested Runs:**
+
+```python
+@step(
+    settings={
+        "experiment_tracker": MLFlowExperimentTrackerSettings(
+            nested=True,  # Create nested run within parent
+        )
+    }
+)
+def tune_hyperparameters() -> dict:
+    # Each hyperparameter trial creates a nested run
+    for params in param_grid:
+        with mlflow.start_run(nested=True):
+            score = train_and_evaluate(params)
+            mlflow.log_params(params)
+            mlflow.log_metric("score", score)
+```
+
+### Supported Frameworks
+
+MLflow autologging supports:
+
+- **scikit-learn**: `mlflow.sklearn.autolog()`
+- **TensorFlow/Keras**: `mlflow.tensorflow.autolog()` / `mlflow.keras.autolog()`
+- **PyTorch**: `mlflow.pytorch.autolog()`
+- **XGBoost**: `mlflow.xgboost.autolog()`
+- **LightGBM**: `mlflow.lightgbm.autolog()`
+- **Spark ML**: `mlflow.spark.autolog()`
+- **Fastai**: `mlflow.fastai.autolog()`
+
+## MLflow Model Registry
+
+Manage model versions and lifecycle stages.
+
+### Configuration
+
+```bash
+zenml model-registry register mlflow-registry \
+    --flavor=mlflow \
+    --registry_uri=https://mlflow.mycompany.com
+```
+
+If `registry_uri` is not specified, uses the same URI as the experiment tracker.
+
+### Registering Models
+
+```python
+from zenml import step
+import mlflow
+
+@step(experiment_tracker="mlflow-tracker")
+def register_model(model: Model) -> None:
+    # Log and register model
+    mlflow.sklearn.log_model(
+        model,
+        artifact_path="model",
+        registered_model_name="recommendation-model",
+    )
+```
+
+### Managing Model Versions
+
+```python
+from mlflow.tracking import MlflowClient
+
+client = MlflowClient()
+
+# Transition model to production
+client.transition_model_version_stage(
+    name="recommendation-model",
+    version=3,
+    stage="Production",
+)
+
+# Add description
+client.update_model_version(
+    name="recommendation-model",
+    version=3,
+    description="Deployed on 2024-01-15, improved accuracy by 5%",
+)
+
+# Get latest production model
+latest_prod = client.get_latest_versions(
+    name="recommendation-model",
+    stages=["Production"],
+)[0]
+```
+
+### Model Stages
+
+- **None**: Default stage
+- **Staging**: For testing
+- **Production**: Currently deployed
+- **Archived**: Deprecated versions
+
+## MLflow Model Deployer
+
+Deploy models as local REST endpoints.
+
+### Configuration
+
+```bash
+zenml model-deployer register mlflow-deployer \
+    --flavor=mlflow
+```
+
+### Deploying Models
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.mlflow.steps import mlflow_model_deployer_step
+import mlflow
+
+@step(experiment_tracker="mlflow-tracker")
+def train_and_log_model() -> str:
+    # Train model
+    model = train_model()
+    
+    # Log to MLflow
+    model_uri = mlflow.sklearn.log_model(
+        model,
+        artifact_path="model",
+    ).model_uri
+    
+    return model_uri
+
+@pipeline
+def deployment_pipeline():
+    model_uri = train_and_log_model()
+    
+    # Deploy model
+    mlflow_model_deployer_step(
+        model_uri=model_uri,
+        name="recommendation-model",
+        workers=2,
+        timeout=300,
+    )
+```
+
+### Making Predictions
+
+```python
+from zenml.client import Client
+import requests
+
+# Get deployed model service
+model_deployer = Client().active_stack.model_deployer
+services = model_deployer.find_model_server(
+    model_name="recommendation-model"
+)
+
+if services:
+    service = services[0]
+    
+    # Make prediction
+    response = requests.post(
+        f"{service.prediction_url}/invocations",
+        json={"inputs": [[1.0, 2.0, 3.0]]},
+    )
+    
+    predictions = response.json()
+```
+
+## Complete Stack Example
+
+```bash
+# Register experiment tracker
+zenml experiment-tracker register mlflow-tracker \
+    --flavor=mlflow \
+    --tracking_uri=https://mlflow.mycompany.com \
+    --tracking_username=admin \
+    --tracking_password=secretpass
+
+# Register model registry
+zenml model-registry register mlflow-registry \
+    --flavor=mlflow
+
+# Register model deployer
+zenml model-deployer register mlflow-deployer \
+    --flavor=mlflow
+
+# Create stack
+zenml stack register mlflow-stack \
+    -o local \
+    -a local \
+    -e mlflow-tracker \
+    -r mlflow-registry \
+    -d mlflow-deployer
+
+# Activate
+zenml stack set mlflow-stack
+```
+
+## Setting Up MLflow Server
+
+**Local Development:**
+
+```bash
+# Start MLflow server
+mlflow server \
+    --backend-store-uri sqlite:///mlflow.db \
+    --default-artifact-root ./mlruns \
+    --host 0.0.0.0 \
+    --port 5000
+```
+
+**Production (PostgreSQL + S3):**
+
+```bash
+mlflow server \
+    --backend-store-uri postgresql://user:pass@localhost/mlflow \
+    --default-artifact-root s3://my-mlflow-artifacts \
+    --host 0.0.0.0 \
+    --port 5000
+```
+
+**Docker:**
+
+```bash
+docker run -p 5000:5000 \
+    -e AWS_ACCESS_KEY_ID=your-key \
+    -e AWS_SECRET_ACCESS_KEY=your-secret \
+    ghcr.io/mlflow/mlflow \
+    mlflow server \
+    --backend-store-uri sqlite:///mlflow.db \
+    --default-artifact-root s3://my-mlflow-artifacts \
+    --host 0.0.0.0
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Autologging">
+    Enable autologging for automatic metric capture:
+    
+    ```python
+    import mlflow
+    
+    @step(experiment_tracker="mlflow-tracker")
+    def train_model():
+        mlflow.sklearn.autolog()
+        # Training automatically logged
+        model.fit(X_train, y_train)
+    ```
+  </Accordion>
+
+  <Accordion title="Organize with Experiments and Tags">
+    Use experiments and tags for organization:
+    
+    ```python
+    MLFlowExperimentTrackerSettings(
+        experiment_name="recommendation-v2",
+        tags={
+            "model_type": "collaborative-filtering",
+            "dataset_version": "v2.1",
+            "environment": "production",
+        },
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Log Model Signatures">
+    Include model signatures for validation:
+    
+    ```python
+    from mlflow.models.signature import infer_signature
+    
+    signature = infer_signature(X_train, model.predict(X_train))
+    mlflow.sklearn.log_model(
+        model,
+        "model",
+        signature=signature,
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Use Remote Artifact Storage">
+    Store artifacts in cloud storage for scalability:
+    
+    ```bash
+    mlflow server \
+        --backend-store-uri postgresql://... \
+        --default-artifact-root s3://my-mlflow-artifacts
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Connection Refused">
+    If you can't connect to MLflow server:
+    
+    1. Verify server is running: `curl http://localhost:5000`
+    2. Check `tracking_uri` is correct
+    3. Verify firewall rules
+    4. Check authentication credentials
+  </Accordion>
+
+  <Accordion title="Artifact Upload Fails">
+    If artifact upload errors occur:
+    
+    1. Check artifact store permissions
+    2. Verify S3/GCS credentials are configured
+    3. Ensure artifact root path exists
+    4. Check network connectivity to storage
+  </Accordion>
+
+  <Accordion title="Model Registration Fails">
+    If model registration doesn't work:
+    
+    1. Verify model registry URI is set
+    2. Check permissions for model registry
+    3. Ensure model name is valid
+    4. Check MLflow version compatibility
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="W&B Integration" href="./wandb">
+    Compare with Weights & Biases tracking
+  </Card>
+  <Card title="Experiment Tracking" href="../stack-components/experiment-trackers">
+    Learn more about experiment tracking
+  </Card>
+  <Card title="Model Registry" href="../stack-components/model-registries">
+    Manage model lifecycle
+  </Card>
+  <Card title="MLflow Docs" href="https://mlflow.org/docs/latest/">
+    Official MLflow documentation
+  </Card>
+</CardGroup>

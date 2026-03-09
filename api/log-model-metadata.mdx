@@ -1,0 +1,244 @@
+---
+title: "log_model_metadata"
+description: "Log metadata to model versions (deprecated)"
+icon: "tag"
+---
+
+<Warning>
+This function is deprecated and will be removed in a future release. Use `log_metadata()` with `infer_model=True` or specific model parameters instead.
+</Warning>
+
+The `log_model_metadata()` function logs metadata to model versions. It has been superseded by the more flexible `log_metadata()` function.
+
+## Signature
+
+```python
+def log_model_metadata(
+    metadata: Dict[str, MetadataType],
+    model_name: Optional[str] = None,
+    model_version: Optional[Union[ModelStages, int, str]] = None,
+) -> None
+```
+
+## Parameters
+
+<ParamField path="metadata" type="Dict[str, MetadataType]" required>
+  Dictionary of metadata key-value pairs to log.
+</ParamField>
+
+<ParamField path="model_name" type="str" optional>
+  The name of the model. Can be omitted when called inside a step with a configured model.
+</ParamField>
+
+<ParamField path="model_version" type="Union[ModelStages, int, str]" optional>
+  The version or stage of the model. Can be omitted when called inside a step with a configured model.
+</ParamField>
+
+## Migration Guide
+
+### Old Way (Deprecated)
+
+```python
+from zenml import step, log_model_metadata, Model
+
+@step(model=Model(name="my_model", version="1.0"))
+def train_model() -> None:
+    accuracy = 0.95
+    
+    # Old way - deprecated
+    log_model_metadata(
+        metadata={"accuracy": accuracy},
+        model_name="my_model",
+        model_version="1.0"
+    )
+```
+
+### New Way (Recommended)
+
+```python
+from zenml import step, log_metadata, Model
+
+@step(model=Model(name="my_model", version="1.0"))
+def train_model() -> None:
+    accuracy = 0.95
+    
+    # New way - recommended
+    log_metadata(
+        metadata={"accuracy": accuracy},
+        infer_model=True
+    )
+```
+
+## Examples with New Approach
+
+### Infer Model from Step Context
+
+```python
+from zenml import step, log_metadata, Model
+
+@step(model=Model(name="iris_classifier", version="2.0"))
+def evaluate_model() -> float:
+    accuracy = 0.96
+    f1_score = 0.94
+    
+    # Automatically infer the model from step context
+    log_metadata(
+        metadata={
+            "test_accuracy": accuracy,
+            "test_f1": f1_score,
+            "test_samples": 150
+        },
+        infer_model=True
+    )
+    
+    return accuracy
+```
+
+### Log to Specific Model Version
+
+```python
+from zenml import log_metadata
+
+# Log metadata to a specific model version
+log_metadata(
+    metadata={
+        "deployment_date": "2024-01-15",
+        "deployment_target": "production",
+        "replicas": 3
+    },
+    model_name="sentiment_analyzer",
+    model_version="3.2.0"
+)
+```
+
+### Log to Model Stage
+
+```python
+from zenml import log_metadata
+from zenml.enums import ModelStages
+
+# Log metadata to the production model
+log_metadata(
+    metadata={
+        "monitoring_enabled": True,
+        "alert_threshold": 0.85,
+        "last_health_check": "2024-01-15T10:00:00Z"
+    },
+    model_name="fraud_detector",
+    model_version=ModelStages.PRODUCTION
+)
+```
+
+### Log to Model by ID
+
+```python
+from zenml import log_metadata
+from uuid import UUID
+
+# Log metadata using model version ID
+model_id = UUID("123e4567-e89b-12d3-a456-426614174000")
+
+log_metadata(
+    metadata={
+        "retraining_triggered": True,
+        "trigger_reason": "performance_degradation"
+    },
+    model_version_id=model_id
+)
+```
+
+### Comprehensive Model Tracking
+
+```python
+from zenml import pipeline, step, log_metadata, Model
+
+model_config = Model(
+    name="customer_churn_predictor",
+    version="1.5.0"
+)
+
+@step(model=model_config)
+def train_step() -> dict:
+    # Training logic
+    results = {
+        "train_accuracy": 0.92,
+        "train_loss": 0.08
+    }
+    
+    log_metadata(
+        metadata={
+            "training_duration_seconds": 3600,
+            "dataset_size": 100000,
+            "features_used": 25,
+            **results
+        },
+        infer_model=True
+    )
+    
+    return results
+
+@step(model=model_config)
+def evaluate_step(train_results: dict) -> None:
+    # Evaluation logic
+    log_metadata(
+        metadata={
+            "test_accuracy": 0.89,
+            "test_precision": 0.87,
+            "test_recall": 0.91,
+            "test_f1": 0.89
+        },
+        infer_model=True
+    )
+
+@pipeline(model=model_config)
+def ml_pipeline():
+    results = train_step()
+    evaluate_step(results)
+```
+
+### Track Model Lifecycle
+
+```python
+from zenml import step, log_metadata, Model
+from zenml.enums import ModelStages
+
+@step(model=Model(name="recommendation_engine"))
+def deploy_model() -> None:
+    # Deployment logic
+    
+    # Log deployment metadata
+    log_metadata(
+        metadata={
+            "deployment_status": "successful",
+            "deployed_by": "cicd_pipeline",
+            "endpoint": "https://api.example.com/recommend",
+            "version_tag": "v2.1.0",
+            "health_check_passed": True
+        },
+        infer_model=True
+    )
+```
+
+## Why Migrate?
+
+The new `log_metadata()` function offers several advantages:
+
+1. **Unified interface** - One function for logging metadata to steps, runs, artifacts, and models
+2. **Better inference** - More intelligent automatic detection of the target model
+3. **More flexibility** - Can log by ID, name+version, stage, or inference
+4. **Consistent API** - Same patterns across all ZenML entities
+5. **Future-proof** - Active development and support
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="log_metadata" href="./log-metadata" icon="tag">
+    Use the new unified metadata function
+  </Card>
+  <Card title="Model" href="./model" icon="cube">
+    Learn about the Model class
+  </Card>
+  <Card title="get_step_context" href="./get-step-context" icon="brackets-curly">
+    Access step context
+  </Card>
+</CardGroup>

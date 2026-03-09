@@ -1,0 +1,315 @@
+---
+title: Artifact Stores
+description: Store and manage pipeline artifacts, inputs, and outputs
+---
+
+# Artifact Stores
+
+In ZenML, the inputs and outputs which go through any step are treated as artifacts. An Artifact Store is where these artifacts get stored. Every ZenML stack requires an artifact store component.
+
+## Overview
+
+The artifact store is responsible for:
+- Persisting step outputs and pipeline artifacts
+- Loading step inputs from previous executions
+- Providing versioned artifact storage
+- Enabling artifact sharing across pipeline runs
+- Supporting data lineage and provenance tracking
+
+## How Artifacts Work
+
+When a pipeline step produces output, ZenML:
+1. Serializes the output using a materializer
+2. Stores the serialized data in the artifact store
+3. Records metadata about the artifact in the metadata store
+4. Makes the artifact available to downstream steps
+
+## Available Artifact Stores
+
+### Local Artifact Store
+
+Stores artifacts on your local file system. Included out of the box - no installation required.
+
+**Configuration:**
+```bash
+zenml artifact-store register local_store --flavor=local \
+  --path=/path/to/artifacts
+```
+
+**Default path:** `~/.config/zenml/local_stores/<uuid>`
+
+**Use cases:**
+- Local development and testing
+- Single-machine workflows
+- Quick prototyping
+- CI/CD pipelines on single runners
+
+**Limitations:**
+- Not accessible from remote orchestrators
+- Limited to single machine
+- No built-in versioning or redundancy
+
+### S3 Artifact Store
+
+Stores artifacts in Amazon S3 buckets.
+
+**Installation:**
+```bash
+zenml integration install s3
+```
+
+**Configuration:**
+```bash
+zenml artifact-store register s3_store --flavor=s3 \
+  --path=s3://my-bucket/zenml-artifacts
+```
+
+**Authentication:**
+The S3 artifact store uses your AWS credentials. You can authenticate using:
+- AWS credentials file (`~/.aws/credentials`)
+- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+- IAM roles (when running on AWS infrastructure)
+- ZenML service connectors
+
+**Use cases:**
+- Production AWS deployments
+- Scalable artifact storage
+- Multi-region access
+- Integration with other AWS services
+
+**Features:**
+- Automatic versioning
+- Encryption at rest
+- Access control via IAM
+- Lifecycle policies for cost optimization
+
+### GCS Artifact Store
+
+Stores artifacts in Google Cloud Storage buckets.
+
+**Installation:**
+```bash
+zenml integration install gcp
+```
+
+**Configuration:**
+```bash
+zenml artifact-store register gcs_store --flavor=gcs \
+  --path=gs://my-bucket/zenml-artifacts
+```
+
+**Authentication:**
+- Service account key file
+- Application default credentials
+- Environment variable (`GOOGLE_APPLICATION_CREDENTIALS`)
+- ZenML service connectors
+
+**Use cases:**
+- Production GCP deployments
+- Integration with Vertex AI
+- Multi-region redundancy
+- Google Cloud ecosystem integration
+
+**Features:**
+- Object versioning
+- Fine-grained access control
+- Strong consistency
+- Nearline/Coldline storage classes
+
+### Azure Blob Storage Artifact Store
+
+Stores artifacts in Azure Blob Storage.
+
+**Installation:**
+```bash
+zenml integration install azure
+```
+
+**Configuration:**
+```bash
+zenml artifact-store register azure_store --flavor=azure \
+  --path=az://my-container/zenml-artifacts
+```
+
+**Authentication:**
+- Connection string
+- Account key
+- Azure AD credentials
+- ZenML service connectors
+
+**Configuration example:**
+```bash
+zenml artifact-store register azure_store --flavor=azure \
+  --path=az://my-container/zenml-artifacts \
+  --account_name=mystorageaccount
+```
+
+**Use cases:**
+- Azure-based ML infrastructure
+- Integration with Azure ML
+- Enterprise Azure deployments
+- Compliance requirements for Azure
+
+## Choosing an Artifact Store
+
+| Factor | Local | S3 | GCS | Azure |
+|--------|-------|-----|-----|-------|
+| **Setup** | None | Easy | Easy | Easy |
+| **Cost** | Free | Pay-per-use | Pay-per-use | Pay-per-use |
+| **Scalability** | Limited | Unlimited | Unlimited | Unlimited |
+| **Remote Access** | No | Yes | Yes | Yes |
+| **Encryption** | No | Yes | Yes | Yes |
+| **Best For** | Development | AWS infra | GCP infra | Azure infra |
+
+## Working with Artifacts
+
+### Accessing Artifacts
+
+You can access artifacts from any pipeline run:
+
+```python
+from zenml.client import Client
+
+# Get a specific artifact
+client = Client()
+artifact = client.get_artifact_version("my_model", version="1")
+
+# Load the artifact data
+model = artifact.load()
+```
+
+### Artifact Lineage
+
+ZenML automatically tracks artifact lineage:
+
+```python
+# Get all artifacts produced by a pipeline run
+run = client.get_pipeline_run("my_pipeline", "run_name")
+artifacts = run.steps["training_step"].outputs
+
+# Trace artifact back to its source
+artifact = client.get_artifact_version("my_model")
+producing_step = artifact.producer_step
+producing_run = artifact.run
+```
+
+### Artifact Storage Path
+
+Artifacts are stored with a structured path:
+```
+<artifact-store-path>/<pipeline-name>/<step-name>/<artifact-name>/<version>
+```
+
+## Migration Between Artifact Stores
+
+To migrate artifacts between stores:
+
+1. **Create new stack with different artifact store:**
+```bash
+zenml artifact-store register new_store --flavor=s3 --path=s3://new-bucket
+zenml stack copy current migrated
+zenml stack update migrated -a new_store
+```
+
+2. **Re-run pipelines or copy artifacts manually:**
+- Option A: Re-run pipelines with the new stack
+- Option B: Use cloud storage transfer tools (aws s3 sync, gsutil rsync, etc.)
+
+## Artifact Store Authentication
+
+### Using Service Connectors
+
+ZenML service connectors provide secure, centralized authentication:
+
+```bash
+# Register a service connector
+zenml service-connector register aws_connector --type aws \
+  --auth-method=secret-key \
+  --aws_access_key_id=<key> \
+  --aws_secret_access_key=<secret>
+
+# Register artifact store with connector
+zenml artifact-store register s3_store --flavor=s3 \
+  --path=s3://my-bucket \
+  --connector aws_connector
+```
+
+Benefits:
+- Centralized credential management
+- Automatic credential rotation
+- Fine-grained access control
+- Audit logging
+
+### Direct Authentication
+
+For local development, you can rely on cloud provider CLIs:
+
+```bash
+# AWS
+aws configure
+
+# GCP
+gcloud auth application-default login
+
+# Azure
+az login
+```
+
+## Performance Considerations
+
+### Large Artifacts
+
+For large artifacts (models, datasets):
+- Use cloud artifact stores (S3, GCS, Azure) instead of local
+- Enable multipart uploads for files >5GB
+- Consider artifact compression
+- Use appropriate storage classes for infrequent access
+
+### Access Patterns
+
+Optimize based on access patterns:
+- **Frequent access**: Standard storage tier
+- **Infrequent access**: Nearline/Infrequent Access tier
+- **Archival**: Coldline/Archive tier
+
+### Network Transfer
+
+Minimize network transfer costs:
+- Co-locate artifact store in same region as orchestrator
+- Use regional endpoints when available
+- Consider caching for frequently accessed artifacts
+
+## Custom Artifact Stores
+
+You can implement custom artifact stores by extending `BaseArtifactStore`:
+
+```python
+from zenml.artifact_stores import BaseArtifactStore, BaseArtifactStoreConfig
+from zenml.io import fileio
+
+class MyArtifactStoreConfig(BaseArtifactStoreConfig):
+    custom_param: str
+
+class MyArtifactStore(BaseArtifactStore):
+    def open(self, path, mode="r"):
+        # Implement file opening logic
+        return fileio.open(path, mode)
+    
+    def exists(self, path):
+        # Check if path exists
+        return fileio.exists(path)
+```
+
+See the [Custom Components guide](/advanced/custom-components) for details.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Orchestrators" icon="diagram-project" href="/components/orchestrators">
+    Configure pipeline orchestration
+  </Card>
+  
+  <Card title="Container Registries" icon="box" href="/components/container-registries">
+    Set up container image storage
+  </Card>
+</CardGroup>

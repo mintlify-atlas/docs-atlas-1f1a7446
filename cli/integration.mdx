@@ -1,0 +1,478 @@
+---
+title: zenml integration
+description: Install and manage ZenML integrations for third-party tools and cloud providers.
+---
+
+The `zenml integration` command group manages integrations with external MLOps tools, cloud providers, and frameworks.
+
+## Overview
+
+ZenML integrations extend functionality by adding support for:
+
+- Cloud orchestrators (Kubernetes, Airflow, Kubeflow, etc.)
+- Cloud storage (AWS S3, GCP GCS, Azure Blob, etc.)
+- Experiment tracking (MLflow, Weights & Biases, Neptune, etc.)
+- Model deployment (Seldon, BentoML, KServe, etc.)
+- Data validation (Great Expectations, Evidently, Whylogs, etc.)
+- And many more
+
+Each integration packages the necessary dependencies for a specific tool or service.
+
+## Command Structure
+
+```bash
+zenml integration <command> [OPTIONS] [ARGUMENTS]
+```
+
+## Core Commands
+
+### List Integrations
+
+View all available integrations and their installation status:
+
+```bash
+zenml integration list
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━┓
+┃ Integration        │ Required Dependencies         │ Installed ┃
+┠────────────────────┼───────────────────────────────┼───────────┨
+┃ aws                │ boto3, sagemaker              │    ✔      ┃
+┃ gcp                │ google-cloud-storage          │    ✔      ┃
+┃ kubernetes         │ kubernetes                    │    ✔      ┃
+┃ mlflow             │ mlflow                        │    ✔      ┃
+┃ pytorch            │ torch, torchvision            │           ┃
+┃ tensorflow         │ tensorflow                    │           ┃
+┃ wandb              │ wandb                         │           ┃
+┗━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┛
+
+To install the dependencies of a specific integration, type:
+zenml integration install INTEGRATION_NAME
+```
+
+### Install Integrations
+
+Install one or more integrations:
+
+```bash
+zenml integration install <INTEGRATION_NAME> [INTEGRATION_NAME...]
+```
+
+**Examples:**
+
+```bash
+# Install single integration
+zenml integration install aws
+
+# Install multiple integrations
+zenml integration install aws gcp kubernetes
+
+# Install all integrations
+zenml integration install
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-i`, `--ignore-integration` | Exclude specific integrations when installing all |
+| `--uv` | Use `uv` package manager instead of `pip` (experimental) |
+| `-y`, `--yes` | Skip confirmation prompts |
+
+**Advanced examples:**
+
+```bash
+# Install all except specific ones
+zenml integration install -i feast -i aws
+
+# Use uv for faster installation (requires uv to be installed)
+zenml integration install kubernetes --uv
+
+# Skip confirmation
+zenml integration install mlflow wandb -y
+```
+
+### View Integration Requirements
+
+List the packages required by an integration:
+
+```bash
+zenml integration requirements [INTEGRATION_NAME]
+```
+
+**Examples:**
+
+```bash
+# Show requirements for specific integration
+zenml integration requirements aws
+
+# Show requirements for all integrations
+zenml integration requirements
+```
+
+**Example output:**
+
+```
+Requirements for aws:
+boto3>=1.26.0
+sagemaker>=2.117.0,<3.0.0
+```
+
+### Export Requirements
+
+Export integration requirements to a file:
+
+```bash
+zenml integration export-requirements [INTEGRATION_NAMES] [OPTIONS]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-o`, `--output-file` | File path to write requirements |
+| `-i`, `--ignore-integration` | Integrations to exclude |
+| `--installed-only` | Only export installed integrations |
+| `--poetry` | Add to current Poetry project |
+| `--overwrite` | Overwrite existing output file |
+
+**Examples:**
+
+```bash
+# Export specific integrations
+zenml integration export-requirements aws gcp -o requirements.txt
+
+# Export all integrations
+zenml integration export-requirements -o all_requirements.txt
+
+# Export installed integrations only
+zenml integration export-requirements --installed-only -o requirements.txt
+
+# Export all except specific ones
+zenml integration export-requirements -i feast -i whylogs -o requirements.txt
+
+# Add to Poetry project
+zenml integration export-requirements aws gcp --poetry
+
+# Overwrite existing file
+zenml integration export-requirements mlflow wandb -o requirements.txt --overwrite
+```
+
+### Uninstall Integration
+
+Remove an integration's dependencies:
+
+```bash
+zenml integration uninstall <INTEGRATION_NAME>
+```
+
+**Example:**
+
+```bash
+zenml integration uninstall aws
+```
+
+<Warning>
+This uninstalls the integration packages but doesn't affect ZenML components that were already registered using that integration.
+</Warning>
+
+## Available Integrations
+
+Here are some commonly used integrations:
+
+### Cloud Providers
+
+| Integration | Description | Key Features |
+|-------------|-------------|-------------|
+| `aws` | Amazon Web Services | S3, SageMaker, ECR |
+| `gcp` | Google Cloud Platform | GCS, Vertex AI, GCR |
+| `azure` | Microsoft Azure | Blob Storage, AzureML, ACR |
+
+### Orchestrators
+
+| Integration | Description |
+|-------------|-------------|
+| `kubernetes` | Kubernetes orchestration |
+| `kubeflow` | Kubeflow Pipelines |
+| `airflow` | Apache Airflow |
+| `tekton` | Tekton Pipelines |
+
+### Experiment Tracking
+
+| Integration | Description |
+|-------------|-------------|
+| `mlflow` | MLflow tracking and registry |
+| `wandb` | Weights & Biases |
+| `neptune` | Neptune.ai |
+| `comet` | Comet ML |
+
+### Model Deployment
+
+| Integration | Description |
+|-------------|-------------|
+| `seldon` | Seldon Core |
+| `bentoml` | BentoML |
+| `kserve` | KServe (formerly KFServing) |
+
+### Data Validation
+
+| Integration | Description |
+|-------------|-------------|
+| `great_expectations` | Great Expectations |
+| `evidently` | Evidently AI |
+| `whylogs` | WhyLabs |
+| `deepchecks` | Deepchecks |
+
+### ML Frameworks
+
+| Integration | Description |
+|-------------|-------------|
+| `pytorch` | PyTorch |
+| `tensorflow` | TensorFlow |
+| `huggingface` | Hugging Face Transformers |
+| `xgboost` | XGBoost |
+| `lightgbm` | LightGBM |
+| `sklearn` | Scikit-learn |
+
+### Feature Stores
+
+| Integration | Description |
+|-------------|-------------|
+| `feast` | Feast feature store |
+
+### Other Tools
+
+| Integration | Description |
+|-------------|-------------|
+| `slack` | Slack notifications |
+| `discord` | Discord notifications |
+| `label_studio` | Label Studio annotation |
+| `facets` | Facets visualization |
+
+## Using the uv Package Manager
+
+The `--uv` flag enables faster dependency resolution using the `uv` package manager:
+
+```bash
+zenml integration install kubernetes --uv
+```
+
+**Benefits:**
+- Much faster dependency resolution
+- More reliable conflict resolution
+- Better handling of complex dependency trees
+
+**Requirements:**
+- `uv` must be installed: `pip install uv`
+- Experimental feature - may not work on all systems
+- GPU installations may require special handling
+
+## Integration Installation Best Practices
+
+### Install Only What You Need
+
+Integrations can have large dependencies. Install only what you'll use:
+
+```bash
+# Good: install specific integrations
+zenml integration install aws mlflow
+
+# Avoid: installing everything (unless you need it)
+zenml integration install  # installs ALL integrations
+```
+
+### Use Requirements Files
+
+For reproducible environments, export and track requirements:
+
+```bash
+# Export requirements
+zenml integration export-requirements aws gcp mlflow -o requirements-zenml.txt
+
+# In your main requirements.txt
+echo "-r requirements-zenml.txt" >> requirements.txt
+
+# Install in new environment
+pip install -r requirements.txt
+```
+
+### Virtual Environments
+
+Always use virtual environments to avoid conflicts:
+
+```bash
+# Create virtual environment
+python -m venv zenml-env
+source zenml-env/bin/activate  # On Windows: zenml-env\Scripts\activate
+
+# Install ZenML and integrations
+pip install zenml
+zenml integration install aws kubernetes mlflow
+```
+
+### Poetry Projects
+
+For Poetry-based projects:
+
+```bash
+zenml integration export-requirements aws gcp --poetry
+```
+
+This adds the dependencies to your `pyproject.toml`.
+
+## Common Workflows
+
+### Setting Up AWS Stack
+
+```bash
+# Install AWS integration
+zenml integration install aws
+
+# Register components
+zenml artifact-store register s3_store --flavor s3 --path s3://my-bucket
+zenml orchestrator register sagemaker_orch --flavor sagemaker
+
+# Create stack
+zenml stack register aws-stack -a s3_store -o sagemaker_orch
+```
+
+### Setting Up Kubernetes Stack
+
+```bash
+# Install Kubernetes integration
+zenml integration install kubernetes
+
+# Register components
+zenml orchestrator register k8s_orch --flavor kubernetes
+zenml container-registry register my_registry --flavor default --uri my.registry.com
+
+# Create stack
+zenml stack register k8s-stack \
+  -a local_store \
+  -o k8s_orch \
+  -c my_registry
+```
+
+### Setting Up MLflow Tracking
+
+```bash
+# Install MLflow integration
+zenml integration install mlflow
+
+# Register experiment tracker
+zenml experiment-tracker register mlflow_tracker \
+  --flavor mlflow \
+  --tracking_uri http://localhost:5000
+
+# Add to stack
+zenml stack update my-stack --experiment_tracker mlflow_tracker
+```
+
+## Integration Requirements in CI/CD
+
+For CI/CD pipelines, pin exact versions:
+
+```bash
+# Export with exact versions
+zenml integration export-requirements aws kubernetes mlflow -o requirements.txt
+
+# requirements.txt will contain pinned versions like:
+# boto3==1.26.137
+# kubernetes==26.1.0
+# mlflow==2.3.1
+```
+
+In your CI configuration:
+
+```yaml
+# .github/workflows/pipeline.yml
+steps:
+  - name: Install dependencies
+    run: |
+      pip install zenml
+      pip install -r requirements.txt
+  
+  - name: Run pipeline
+    run: python run_pipeline.py
+```
+
+## Troubleshooting
+
+### Installation Failures
+
+If integration installation fails:
+
+1. **Check Python version**: Some integrations require specific Python versions
+   ```bash
+   python --version
+   ```
+
+2. **Update pip**: Ensure pip is up to date
+   ```bash
+   pip install --upgrade pip
+   ```
+
+3. **Try with uv**: Use the faster package manager
+   ```bash
+   pip install uv
+   zenml integration install aws --uv
+   ```
+
+4. **Check for conflicts**: Install in a clean environment
+   ```bash
+   python -m venv clean-env
+   source clean-env/bin/activate
+   pip install zenml
+   zenml integration install <integration>
+   ```
+
+### Version Conflicts
+
+If you encounter version conflicts:
+
+```bash
+# View detailed requirements
+zenml integration requirements <integration>
+
+# Export to file and review
+zenml integration export-requirements <integration> -o check.txt
+cat check.txt
+```
+
+### Integration Not Working After Installation
+
+After installing an integration, you may need to:
+
+1. **Restart your Python session** or notebook kernel
+2. **Verify installation**:
+   ```bash
+   zenml integration list  # Should show as installed
+   ```
+3. **Check component registration**:
+   ```bash
+   zenml <component-type> flavor list
+   ```
+
+### WhyLogs Warning
+
+When installing the `whylogs` integration, you'll see a warning about WhyLabs discontinuation. The open-source library still works, but hosted features may be limited.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Stack" icon="layer-group" href="/cli/stack">
+    Use installed integrations to build your stack
+  </Card>
+  <Card title="Component Guide" icon="book">
+    Learn about specific component configurations
+  </Card>
+  <Card title="Run Pipelines" icon="play" href="/cli/pipeline">
+    Execute pipelines with your integrations
+  </Card>
+  <Card title="Integration Docs" icon="puzzle-piece">
+    Detailed docs for each integration
+  </Card>
+</CardGroup>

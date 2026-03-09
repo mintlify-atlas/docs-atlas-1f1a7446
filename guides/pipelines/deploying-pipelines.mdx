@@ -1,0 +1,423 @@
+---
+title: Deploying Pipelines
+description: Deploy ZenML pipelines as long-running services
+---
+
+ZenML allows you to deploy pipelines as persistent services that can be invoked on-demand. This is useful for inference pipelines, real-time processing, or any workflow that needs to respond to external triggers.
+
+## Understanding Pipeline Deployment
+
+When you deploy a pipeline:
+
+- It becomes a long-running service that can be invoked multiple times
+- The pipeline code is registered with ZenML server
+- You can trigger runs via CLI, API, or webhook
+- Each invocation creates a new pipeline run with unique parameters
+
+## Deploying Your First Pipeline
+
+<Steps>
+
+### Step 1: Create a Deployment-Ready Pipeline
+
+Ensure your pipeline accepts parameters for flexible invocation:
+
+```python
+from typing import Optional, Annotated
+from zenml import pipeline, step
+
+@step
+def simple_step(name: Optional[str] = None) -> str:
+    """A simple step that returns a greeting."""
+    if name:
+        message = f"Hello {name}! Welcome to ZenML"
+    else:
+        message = "Hello from ZenML!"
+    print(message)
+    return message
+
+@pipeline
+def simple_pipeline(name: Optional[str] = None) -> Annotated[str, "greeting"]:
+    """A pipeline that can be deployed and invoked.
+    
+    Args:
+        name: Optional name to personalize the greeting
+        
+    Returns:
+        A greeting message as an artifact
+    """
+    greeting = simple_step(name=name)
+    return greeting
+```
+
+### Step 2: Deploy the Pipeline
+
+Use the ZenML CLI to deploy your pipeline:
+
+```bash
+zenml pipeline deploy pipelines.simple_pipeline.simple_pipeline
+```
+
+With a custom deployment name:
+
+```bash
+zenml pipeline deploy pipelines.simple_pipeline.simple_pipeline \
+  -n my_greeting_service
+```
+
+### Step 3: Verify Deployment
+
+Check that your pipeline is deployed:
+
+```bash
+zenml pipeline list-deployments
+```
+
+Get details about a specific deployment:
+
+```bash
+zenml deployment describe my_greeting_service
+```
+
+### Step 4: Invoke the Deployed Pipeline
+
+Trigger a run of your deployed pipeline:
+
+```bash
+zenml deployment invoke my_greeting_service --name="Alice"
+```
+
+Invoke with default parameters:
+
+```bash
+zenml deployment invoke my_greeting_service
+```
+
+</Steps>
+
+## Deployment Settings
+
+Configure deployment behavior with settings:
+
+```python
+from zenml import pipeline
+from zenml.config import DeploymentSettings, CORSConfig
+
+deployment_settings = DeploymentSettings(
+    app_title="Inference Pipeline",
+    cors=CORSConfig(
+        allow_origins=["*"],  # Configure CORS for API access
+    ),
+)
+
+@pipeline(
+    settings={
+        "deployment": deployment_settings,
+    },
+    enable_cache=False,
+)
+def inference_pipeline(
+    model_version: str = "latest",
+    batch_size: int = 32
+):
+    """Inference pipeline with deployment settings."""
+    model = load_model(version=model_version)
+    data = load_inference_data()
+    predictions = predict(model, data, batch_size=batch_size)
+    return predictions
+```
+
+## Updating Deployed Pipelines
+
+Update an existing deployment:
+
+```bash
+zenml pipeline deploy pipelines.inference_pipeline.inference_pipeline \
+  -n inference_service \
+  -u  # Update flag
+```
+
+This updates the deployment with the latest pipeline code.
+
+## Managing Deployments
+
+### List All Deployments
+
+```bash
+zenml pipeline list-deployments
+```
+
+### Describe a Deployment
+
+```bash
+zenml deployment describe inference_service
+```
+
+### Delete a Deployment
+
+```bash
+zenml deployment delete inference_service
+```
+
+## Deployment Patterns
+
+### Inference Service
+
+Deploy a model inference pipeline:
+
+```python
+from typing import List, Dict
+from zenml import pipeline, step
+
+@step
+def load_model(version: str = "latest"):
+    """Load model from registry."""
+    # Load model logic
+    return model
+
+@step
+def predict(model, data: List[Dict]) -> List[float]:
+    """Generate predictions."""
+    # Inference logic
+    return predictions
+
+@pipeline
+def inference_pipeline(
+    model_version: str = "latest",
+    data_source: str = "api"
+):
+    """Production inference pipeline.
+    
+    Args:
+        model_version: Version of model to use
+        data_source: Where to get inference data from
+    """
+    model = load_model(version=model_version)
+    data = load_inference_data(source=data_source)
+    predictions = predict(model, data)
+    store_predictions(predictions)
+```
+
+Deploy and invoke:
+
+```bash
+# Deploy
+zenml pipeline deploy pipelines.inference_pipeline.inference_pipeline \
+  -n inference_api
+
+# Invoke with specific model version
+zenml deployment invoke inference_api \
+  --model_version="v2.1.0" \
+  --data_source="live"
+```
+
+### Data Processing Service
+
+Deploy a data processing pipeline:
+
+```python
+@pipeline
+def data_processing_pipeline(
+    input_path: str,
+    output_format: str = "parquet"
+):
+    """Process and transform data on demand.
+    
+    Args:
+        input_path: Path to input data
+        output_format: Output file format
+    """
+    raw_data = load_data(input_path)
+    cleaned = clean_data(raw_data)
+    transformed = transform_data(cleaned)
+    save_data(transformed, format=output_format)
+```
+
+### Batch Processing Service
+
+Deploy a pipeline for batch processing:
+
+```python
+from datetime import datetime
+
+@pipeline
+def batch_processing_pipeline(
+    batch_id: str,
+    process_date: str,
+    num_records: int = 1000
+):
+    """Process batches of data.
+    
+    Args:
+        batch_id: Unique identifier for this batch
+        process_date: Date to process (YYYY-MM-DD)
+        num_records: Number of records to process
+    """
+    data = fetch_batch_data(batch_id, process_date, num_records)
+    processed = process_batch(data)
+    results = analyze_batch(processed)
+    store_results(results, batch_id)
+```
+
+## Invoking Deployed Pipelines
+
+<CodeGroup>
+
+```bash CLI Invocation
+# Basic invocation
+zenml deployment invoke my_pipeline
+
+# With parameters
+zenml deployment invoke my_pipeline \
+  --learning_rate=0.01 \
+  --epochs=20 \
+  --model_name="production_v1"
+```
+
+```python Python Client
+from zenml.client import Client
+
+client = Client()
+
+# Get the deployment
+deployment = client.get_deployment("my_pipeline")
+
+# Invoke with parameters
+run = deployment.invoke(
+    learning_rate=0.01,
+    epochs=20,
+    model_name="production_v1"
+)
+
+print(f"Pipeline run started: {run.id}")
+```
+
+```bash REST API
+# Using curl to invoke via REST API
+curl -X POST https://your-zenml-server/api/v1/deployments/my_pipeline/invoke \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "learning_rate": 0.01,
+    "epochs": 20,
+    "model_name": "production_v1"
+  }'
+```
+
+</CodeGroup>
+
+## Deployment Configuration Files
+
+Use configuration files for complex deployments:
+
+```yaml config.yaml
+# Deployment configuration
+name: production_inference
+pipeline: pipelines.inference_pipeline.inference_pipeline
+settings:
+  deployment:
+    app_title: "Production Inference Service"
+    cors:
+      allow_origins: ["https://myapp.com"]
+parameters:
+  model_version: "v2.0.0"
+  batch_size: 64
+```
+
+Deploy using the config:
+
+```bash
+zenml pipeline deploy -c config.yaml
+```
+
+## Monitoring Deployments
+
+Track deployment health and runs:
+
+```bash
+# View deployment status
+zenml deployment describe my_pipeline
+
+# List runs for a deployment
+zenml pipeline runs list --deployment=my_pipeline
+
+# View logs for a specific run
+zenml pipeline runs logs RUN_ID
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Parameterize Everything" icon="sliders">
+Make all deployment-specific values configurable via parameters
+</Card>
+
+<Card title="Add Input Validation" icon="shield">
+Validate parameters at the start of pipeline execution
+</Card>
+
+<Card title="Use Deployment Settings" icon="gear">
+Configure CORS, authentication, and other settings properly
+</Card>
+
+<Card title="Version Your Deployments" icon="code-branch">
+Use clear naming conventions and version tags for deployments
+</Card>
+
+<Card title="Monitor Performance" icon="chart-line">
+Track invocation frequency, execution time, and success rates
+</Card>
+
+<Card title="Handle Errors Gracefully" icon="circle-exclamation">
+Implement proper error handling and logging in deployed pipelines
+</Card>
+
+</CardGroup>
+
+## Troubleshooting
+
+### Deployment Fails
+
+Check pipeline syntax and imports:
+
+```bash
+# Validate pipeline before deploying
+python -m pipelines.my_pipeline
+```
+
+### Invocation Errors
+
+Verify parameter types and names:
+
+```bash
+# Get deployment details including parameters
+zenml deployment describe my_pipeline
+```
+
+### Connection Issues
+
+Ensure you're connected to the right ZenML server:
+
+```bash
+zenml status
+zenml connect --url https://your-zenml-server
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Scheduling Pipelines" href="/guides/pipelines/scheduling-pipelines" icon="clock">
+Automate pipeline execution with schedules
+</Card>
+
+<Card title="Stack Configuration" href="/guides/stacks/configuring-stacks" icon="layer-group">
+Configure stacks for different deployment environments
+</Card>
+
+<Card title="Creating Pipelines" href="/guides/pipelines/creating-pipelines" icon="diagram-project">
+Learn more about building pipelines
+</Card>
+
+</CardGroup>

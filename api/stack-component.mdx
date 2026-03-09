@@ -1,0 +1,501 @@
+---
+title: "StackComponent"
+description: "Base class for all ZenML stack components that provide infrastructure and tooling for pipelines."
+---
+
+## Overview
+
+The `StackComponent` class is the abstract base class for all stack components in ZenML. Stack components are modular building blocks that provide specific functionality within a ZenML stack, such as orchestration, artifact storage, experiment tracking, and more.
+
+## Class Definition
+
+```python
+from zenml.stack import StackComponent
+```
+
+### Component Types
+
+ZenML supports the following stack component types:
+
+- `ORCHESTRATOR` - Pipeline execution coordination
+- `ARTIFACT_STORE` - Artifact and output storage
+- `CONTAINER_REGISTRY` - Docker image storage
+- `STEP_OPERATOR` - Specialized step execution
+- `EXPERIMENT_TRACKER` - Experiment tracking and logging
+- `MODEL_DEPLOYER` - Model deployment
+- `FEATURE_STORE` - Feature management
+- `ALERTER` - Notifications and alerts
+- `ANNOTATOR` - Data annotation
+- `DATA_VALIDATOR` - Data quality validation
+- `IMAGE_BUILDER` - Docker image building
+- `MODEL_REGISTRY` - Model version management
+- `DEPLOYER` - Pipeline deployment
+- `LOG_STORE` - Log storage and management
+
+## Initialization
+
+```python
+def __init__(
+    self,
+    name: str,
+    id: UUID,
+    config: StackComponentConfig,
+    flavor: str,
+    type: StackComponentType,
+    user: Optional[UUID],
+    created: datetime,
+    updated: datetime,
+    environment: Optional[Dict[str, str]] = None,
+    secrets: Optional[List[UUID]] = None,
+    labels: Optional[Dict[str, Any]] = None,
+    connector_requirements: Optional[ServiceConnectorRequirements] = None,
+    connector: Optional[UUID] = None,
+    connector_resource_id: Optional[str] = None,
+):
+```
+
+<ParamField path="name" type="str" required>
+  The name of the component.
+</ParamField>
+
+<ParamField path="id" type="UUID" required>
+  Unique ID of the component.
+</ParamField>
+
+<ParamField path="config" type="StackComponentConfig" required>
+  Configuration for the component.
+</ParamField>
+
+<ParamField path="flavor" type="str" required>
+  The flavor of the component (e.g., "local", "kubernetes", "aws").
+</ParamField>
+
+<ParamField path="type" type="StackComponentType" required>
+  The type of the component.
+</ParamField>
+
+<ParamField path="user" type="UUID">
+  ID of the user who created the component.
+</ParamField>
+
+<ParamField path="created" type="datetime" required>
+  Creation timestamp.
+</ParamField>
+
+<ParamField path="updated" type="datetime" required>
+  Last update timestamp.
+</ParamField>
+
+<ParamField path="environment" type="Dict[str, str]">
+  Environment variables to set when using this component.
+</ParamField>
+
+<ParamField path="secrets" type="List[UUID]">
+  Secrets to make available as environment variables.
+</ParamField>
+
+<ParamField path="labels" type="Dict[str, Any]">
+  Labels for organizing components.
+</ParamField>
+
+<ParamField path="connector_requirements" type="ServiceConnectorRequirements">
+  Requirements for service connector integration.
+</ParamField>
+
+<ParamField path="connector" type="UUID">
+  ID of a linked service connector.
+</ParamField>
+
+<ParamField path="connector_resource_id" type="str">
+  Custom resource ID to access through the connector.
+</ParamField>
+
+## Class Methods
+
+### from_model
+
+```python
+@classmethod
+def from_model(cls, component_model: ComponentResponse) -> StackComponent:
+    """Creates a StackComponent from a ComponentResponse."""
+```
+
+<ParamField path="component_model" type="ComponentResponse" required>
+  The component model to create the StackComponent from.
+</ParamField>
+
+<ResponseField name="return" type="StackComponent">
+  The created StackComponent instance.
+</ResponseField>
+
+## Properties
+
+### config
+
+```python
+@property
+def config(self) -> StackComponentConfig:
+    """Returns the configuration of the stack component."""
+```
+
+<ResponseField name="return" type="StackComponentConfig">
+  The component's configuration object.
+</ResponseField>
+
+<Note>
+  Subclasses should override this property to return their specific config class.
+</Note>
+
+### settings_class
+
+```python
+@property
+def settings_class(self) -> Optional[Type[BaseSettings]]:
+    """Class specifying available settings for this component."""
+```
+
+<ResponseField name="return" type="Type[BaseSettings] | None">
+  Optional settings class for configuring component behavior.
+</ResponseField>
+
+### validator
+
+```python
+@property
+def validator(self) -> Optional[StackValidator]:
+    """The optional validator of the stack component."""
+```
+
+<ResponseField name="return" type="StackValidator | None">
+  Optional validator to check stack compatibility.
+</ResponseField>
+
+### requirements
+
+```python
+@property
+def requirements(self) -> Set[str]:
+    """Set of PyPI requirements for the component."""
+```
+
+<ResponseField name="return" type="Set[str]">
+  PyPI packages required by this component.
+</ResponseField>
+
+### apt_packages
+
+```python
+@property
+def apt_packages(self) -> List[str]:
+    """List of APT package requirements for the component."""
+```
+
+<ResponseField name="return" type="List[str]">
+  APT packages required by this component.
+</ResponseField>
+
+### local_path
+
+```python
+@property
+def local_path(self) -> Optional[str]:
+    """Path to a local directory for persistent information."""
+```
+
+<ResponseField name="return" type="str | None">
+  Optional path to local storage directory.
+</ResponseField>
+
+<Warning>
+  This path must be relative to the ZenML local stores directory for proper container mounting.
+</Warning>
+
+### log_file
+
+```python
+@property
+def log_file(self) -> Optional[str]:
+    """Optional path to a log file for the stack component."""
+```
+
+## Core Methods
+
+### get_settings
+
+```python
+def get_settings(
+    self,
+    container: Union[
+        Step,
+        StepRunResponse,
+        StepRunInfo,
+        PipelineSnapshotBase,
+        PipelineSnapshotResponse,
+        PipelineRunResponse,
+    ],
+) -> BaseSettings:
+    """Gets settings for this stack component."""
+```
+
+<ParamField path="container" type="Step | StepRunInfo | PipelineSnapshot" required>
+  The step or pipeline from which to get settings.
+</ParamField>
+
+<ResponseField name="return" type="BaseSettings">
+  Settings for this component merged with container settings.
+</ResponseField>
+
+### get_connector
+
+```python
+def get_connector(self) -> Optional[ServiceConnector]:
+    """Returns the connector linked to this stack component."""
+```
+
+<ResponseField name="return" type="ServiceConnector | None">
+  The linked service connector if configured.
+</ResponseField>
+
+### connector_has_expired
+
+```python
+def connector_has_expired(self) -> bool:
+    """Checks whether the connector linked to this component has expired."""
+```
+
+<ResponseField name="return" type="bool">
+  True if the connector has expired or isn't linked.
+</ResponseField>
+
+## Lifecycle Hooks
+
+### prepare_step_run
+
+```python
+def prepare_step_run(self, info: StepRunInfo) -> None:
+    """Prepares running a step."""
+```
+
+<ParamField path="info" type="StepRunInfo" required>
+  Information about the step that will be executed.
+</ParamField>
+
+Use this hook to set up resources before a step runs.
+
+### get_step_run_metadata
+
+```python
+def get_step_run_metadata(
+    self,
+    info: StepRunInfo
+) -> Dict[str, MetadataType]:
+    """Get component-specific metadata after a step ran."""
+```
+
+<ParamField path="info" type="StepRunInfo" required>
+  Information about the step that was executed.
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, MetadataType]">
+  Metadata dictionary to attach to the step run.
+</ResponseField>
+
+### cleanup_step_run
+
+```python
+def cleanup_step_run(self, info: StepRunInfo, step_failed: bool) -> None:
+    """Cleans up resources after the step run is finished."""
+```
+
+<ParamField path="info" type="StepRunInfo" required>
+  Information about the step that was executed.
+</ParamField>
+
+<ParamField path="step_failed" type="bool" required>
+  Whether the step failed.
+</ParamField>
+
+### cleanup
+
+```python
+def cleanup(self) -> None:
+    """Cleans up the component after it has been used."""
+```
+
+## Pipeline-Level Hooks
+
+### get_pipeline_run_metadata
+
+```python
+def get_pipeline_run_metadata(
+    self,
+    run_id: UUID
+) -> Dict[str, MetadataType]:
+    """Get general component-specific metadata for a pipeline run."""
+```
+
+<ParamField path="run_id" type="UUID" required>
+  The ID of the pipeline run.
+</ParamField>
+
+<ResponseField name="return" type="Dict[str, MetadataType]">
+  Metadata dictionary for the pipeline run.
+</ResponseField>
+
+## Docker Integration
+
+### get_docker_builds
+
+```python
+def get_docker_builds(
+    self,
+    snapshot: PipelineSnapshotBase
+) -> List[BuildConfiguration]:
+    """Gets the Docker builds required for the component."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotBase" required>
+  The pipeline snapshot for which to get builds.
+</ParamField>
+
+<ResponseField name="return" type="List[BuildConfiguration]">
+  List of required Docker build configurations.
+</ResponseField>
+
+## Configuration Class
+
+### StackComponentConfig
+
+All stack components must define a configuration class inheriting from `StackComponentConfig`:
+
+```python
+from zenml.stack import StackComponentConfig
+
+class MyComponentConfig(StackComponentConfig):
+    """Configuration for my custom component."""
+    
+    api_key: str
+    endpoint: str = "https://api.example.com"
+    timeout: int = 30
+    
+    @property
+    def is_remote(self) -> bool:
+        """Whether this component runs remotely."""
+        return True
+    
+    @property
+    def is_local(self) -> bool:
+        """Whether this component relies on local resources."""
+        return False
+```
+
+<ParamField path="is_remote" type="bool" default="False">
+  Override to return True if the component executes code remotely.
+</ParamField>
+
+<ParamField path="is_local" type="bool" default="False">
+  Override to return True if the component relies on local resources.
+</ParamField>
+
+<ParamField path="is_valid" type="bool" default="True">
+  Override to return False if the configuration is invalid.
+</ParamField>
+
+## Creating a Custom Component
+
+```python
+from typing import ClassVar, Optional, Type
+from zenml.stack import StackComponent, StackComponentConfig, Flavor
+from zenml.enums import StackComponentType
+from zenml.config.base_settings import BaseSettings
+
+class MyComponentConfig(StackComponentConfig):
+    """Custom component configuration."""
+    api_endpoint: str
+    api_key: str
+
+class MyComponentSettings(BaseSettings):
+    """Runtime settings for the component."""
+    batch_size: int = 32
+    parallel_workers: int = 4
+
+class MyComponent(StackComponent):
+    """Custom stack component implementation."""
+    
+    @property
+    def config(self) -> MyComponentConfig:
+        """Returns the component configuration."""
+        return cast(MyComponentConfig, self._config)
+    
+    @property
+    def settings_class(self) -> Optional[Type[BaseSettings]]:
+        """Returns the settings class."""
+        return MyComponentSettings
+    
+    def prepare_step_run(self, info: StepRunInfo) -> None:
+        """Prepare for step execution."""
+        settings = self.get_settings(info)
+        # Use settings.batch_size, settings.parallel_workers
+        print(f"Preparing with batch_size={settings.batch_size}")
+    
+    def cleanup(self) -> None:
+        """Clean up resources."""
+        print("Cleaning up component resources")
+
+class MyComponentFlavor(Flavor):
+    """Flavor for the custom component."""
+    
+    @property
+    def name(self) -> str:
+        return "my_component"
+    
+    @property
+    def type(self) -> StackComponentType:
+        return StackComponentType.ANNOTATOR  # Choose appropriate type
+    
+    @property
+    def config_class(self) -> Type[StackComponentConfig]:
+        return MyComponentConfig
+    
+    @property
+    def implementation_class(self) -> Type[StackComponent]:
+        return MyComponent
+```
+
+## Secret References
+
+Stack components support secret references for sensitive configuration:
+
+```python
+from zenml.stack import StackComponentConfig
+
+class SecureComponentConfig(StackComponentConfig):
+    """Component with secret reference support."""
+    
+    # Regular configuration
+    endpoint: str
+    
+    # Secret reference: {{secret_name.key}}
+    api_key: str
+
+# When creating the component:
+# api_key can be set to "{{my_secret.api_key}}"
+# At runtime, ZenML will resolve this to the actual secret value
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Stack" href="/api/stack" icon="layer-group">
+    Learn about the Stack class
+  </Card>
+  <Card title="BaseOrchestrator" href="/api/base-orchestrator" icon="network-wired">
+    Example of a stack component type
+  </Card>
+  <Card title="Stack Components Guide" href="/stack-components" icon="book">
+    Guide to all stack component types
+  </Card>
+  <Card title="Custom Components" href="/how-to/stack-deployment/implement-a-custom-stack-component" icon="wrench">
+    How to create custom components
+  </Card>
+</CardGroup>

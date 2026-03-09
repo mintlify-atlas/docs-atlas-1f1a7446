@@ -1,0 +1,324 @@
+---
+title: "remove_tags"
+description: "Remove tags from ZenML resources"
+icon: "tag"
+---
+
+The `remove_tags()` function allows you to remove tags from various ZenML resources including pipelines, runs, artifacts, and more.
+
+## Signature
+
+```python
+def remove_tags(
+    tags: Union[str, List[str]],
+    # Pipeline parameters
+    pipeline: Optional[Union[UUID, str]] = None,
+    # Run parameters
+    run: Optional[Union[UUID, str]] = None,
+    # Run template parameters
+    run_template: Optional[Union[UUID, str]] = None,
+    # Snapshot parameters
+    snapshot: Optional[Union[UUID, str]] = None,
+    # Deployment parameters
+    deployment: Optional[Union[UUID, str]] = None,
+    # Artifact parameters
+    artifact: Optional[Union[UUID, str]] = None,
+    # Artifact version parameters
+    artifact_version_id: Optional[UUID] = None,
+    artifact_name: Optional[str] = None,
+    artifact_version: Optional[str] = None,
+    infer_artifact: Optional[bool] = None,
+) -> None
+```
+
+## Parameters
+
+<ParamField path="tags" type="Union[str, List[str]]" required>
+  The tag name(s) to remove. Can be a single string or a list of strings.
+</ParamField>
+
+<ParamField path="pipeline" type="Union[UUID, str]" optional>
+  The ID or name of the pipeline.
+</ParamField>
+
+<ParamField path="run" type="Union[UUID, str]" optional>
+  The ID, name, or prefix of the pipeline run.
+</ParamField>
+
+<ParamField path="run_template" type="Union[UUID, str]" optional>
+  The ID or name of the run template.
+</ParamField>
+
+<ParamField path="snapshot" type="Union[UUID, str]" optional>
+  The ID of the snapshot.
+</ParamField>
+
+<ParamField path="deployment" type="Union[UUID, str]" optional>
+  The ID or name of the deployment.
+</ParamField>
+
+<ParamField path="artifact" type="Union[UUID, str]" optional>
+  The ID or name of the artifact.
+</ParamField>
+
+<ParamField path="artifact_version_id" type="UUID" optional>
+  The ID of a specific artifact version.
+</ParamField>
+
+<ParamField path="artifact_name" type="str" optional>
+  The name of the artifact (used with `artifact_version` or `infer_artifact`).
+</ParamField>
+
+<ParamField path="artifact_version" type="str" optional>
+  The version of the artifact.
+</ParamField>
+
+<ParamField path="infer_artifact" type="bool" optional>
+  Whether to infer the artifact from the step context.
+</ParamField>
+
+## Examples
+
+### Remove Tags from Current Run
+
+```python
+from zenml import step, remove_tags
+
+@step
+def cleanup_tags() -> None:
+    # Remove experimental tags from the run
+    remove_tags(["experimental", "draft"])
+```
+
+### Remove Tags from Artifact
+
+```python
+from zenml import step, remove_tags
+import pandas as pd
+
+@step
+def update_artifact_tags() -> pd.DataFrame:
+    df = pd.DataFrame({"data": range(100)})
+    
+    # Remove draft tag, mark as finalized
+    remove_tags(
+        tags=["draft", "unreviewed"],
+        infer_artifact=True
+    )
+    
+    return df
+```
+
+### Remove Tags from Specific Output
+
+```python
+from typing import Tuple, Annotated
+from zenml import step, remove_tags
+import pandas as pd
+
+@step
+def update_datasets() -> Tuple[
+    Annotated[pd.DataFrame, "train"],
+    Annotated[pd.DataFrame, "test"],
+]:
+    train = pd.DataFrame({"x": range(800)})
+    test = pd.DataFrame({"x": range(200)})
+    
+    # Remove old version tags
+    remove_tags(
+        tags=["v1", "deprecated"],
+        artifact_name="train",
+        infer_artifact=True
+    )
+    
+    return train, test
+```
+
+### Remove Tags from Existing Artifact
+
+```python
+from zenml import remove_tags
+
+# Remove tags from a specific artifact version
+remove_tags(
+    tags=["testing", "unvalidated"],
+    artifact_name="training_data",
+    artifact_version="v5"
+)
+```
+
+### Remove Tags from Pipeline
+
+```python
+from zenml import remove_tags
+
+# Remove tags from a pipeline
+remove_tags(
+    tags=["experimental"],
+    pipeline="training_pipeline"
+)
+```
+
+### Remove Tags from Run
+
+```python
+from zenml import remove_tags
+
+# Remove tags from a completed run
+remove_tags(
+    tags=["in-progress", "running"],
+    run="training_pipeline-2024_01_15"
+)
+```
+
+### Conditional Tag Removal
+
+```python
+from zenml import step, remove_tags, add_tags
+import pandas as pd
+
+@step
+def validate_data() -> pd.DataFrame:
+    df = pd.read_csv("data.csv")
+    
+    # Check data quality
+    quality_score = check_quality(df)
+    
+    if quality_score > 0.9:
+        # Remove pending tag, add validated tag
+        remove_tags(["pending-validation"])
+        add_tags(["validated", "high-quality"])
+    else:
+        # Remove any approval tags
+        remove_tags(["validated", "approved"])
+        add_tags(["needs-review"])
+    
+    return df
+```
+
+### Clean Up Multiple Tags
+
+```python
+from zenml import remove_tags
+
+# Remove all experimental tags from an artifact
+remove_tags(
+    tags=[
+        "experimental",
+        "draft",
+        "test",
+        "debug",
+        "temporary"
+    ],
+    artifact_name="model_weights",
+    artifact_version="15"
+)
+```
+
+### Remove Single Tag
+
+```python
+from zenml import step, remove_tags
+
+@step
+def finalize_run() -> None:
+    # Remove the draft tag
+    remove_tags("draft")
+```
+
+### Remove Tags in Cleanup Step
+
+```python
+from zenml import pipeline, step, remove_tags
+
+@step
+def process_data() -> dict:
+    return {"status": "complete"}
+
+@step
+def cleanup() -> None:
+    # Remove temporary tags from the run
+    remove_tags([
+        "in-progress",
+        "processing",
+        "temporary"
+    ])
+
+@pipeline
+def data_pipeline():
+    result = process_data()
+    cleanup()
+```
+
+### Remove Tags from Deployment
+
+```python
+from zenml import remove_tags
+
+# Remove staging tag after promoting to production
+remove_tags(
+    tags=["staging", "pre-production"],
+    deployment="ml-model-deployment"
+)
+```
+
+### Safe Tag Removal
+
+```python
+from zenml import remove_tags
+
+try:
+    remove_tags(
+        tags=["old-tag"],
+        artifact_name="my_artifact",
+        artifact_version="3"
+    )
+    print("Tags removed successfully")
+except Exception as e:
+    print(f"Tag removal failed: {e}")
+    # Tag might not exist, which is fine
+```
+
+## Use Cases
+
+1. **Clean up experimental tags** after finalizing a model or dataset
+2. **Update status tags** as resources move through workflows (e.g., remove "draft", add "approved")
+3. **Remove outdated labels** when reprocessing or updating artifacts
+4. **Manage deployment tags** when promoting or demoting models
+5. **Fix tagging mistakes** by removing incorrect tags
+6. **Implement tag lifecycle** by removing tags when conditions change
+7. **Maintain tag hygiene** by cleaning up temporary or debugging tags
+
+## Important Notes
+
+- When called inside a step without parameters, tags are removed from the **pipeline run**
+- If a tag doesn't exist on the resource, the operation completes silently (no error)
+- Tag names are case-sensitive
+- Removing a tag from one resource doesn't affect the same tag on other resources
+- The tag definition persists in ZenML even if removed from all resources
+
+## Combining with add_tags
+
+```python
+from zenml import step, add_tags, remove_tags
+
+@step
+def promote_model() -> None:
+    # Update tags to reflect new status
+    remove_tags(["staging", "testing"])
+    add_tags(["production", "active"])
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="add_tags" href="./add-tags" icon="tags">
+    Add tags to resources
+  </Card>
+  <Card title="Tag" href="./tag" icon="tag">
+    Learn about Tag objects
+  </Card>
+  <Card title="@pipeline" href="./pipeline" icon="code">
+    Configure tags in pipelines
+  </Card>
+</CardGroup>

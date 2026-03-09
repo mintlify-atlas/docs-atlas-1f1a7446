@@ -1,0 +1,326 @@
+---
+title: "save_artifact"
+description: "Manually save artifacts to the artifact store"
+icon: "floppy-disk"
+---
+
+The `save_artifact()` function allows you to manually upload and publish artifacts outside of step outputs.
+
+## Signature
+
+```python
+def save_artifact(
+    data: Any,
+    name: str,
+    version: Optional[Union[int, str]] = None,
+    artifact_type: Optional[ArtifactType] = None,
+    tags: Optional[List[str]] = None,
+    extract_metadata: bool = True,
+    include_visualizations: bool = True,
+    user_metadata: Optional[Dict[str, MetadataType]] = None,
+    materializer: Optional[MaterializerClassOrSource] = None,
+    uri: Optional[str] = None,
+) -> ArtifactVersionResponse
+```
+
+## Parameters
+
+<ParamField path="data" type="Any" required>
+  The artifact data to save.
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  The name of the artifact.
+</ParamField>
+
+<ParamField path="version" type="Union[int, str]" optional>
+  The version of the artifact. If not provided, a new auto-incremented version will be used.
+</ParamField>
+
+<ParamField path="artifact_type" type="ArtifactType" optional>
+  The artifact type. If not given, the type will be determined by the materializer used to save the artifact.
+</ParamField>
+
+<ParamField path="tags" type="List[str]" optional>
+  Tags to associate with the artifact.
+</ParamField>
+
+<ParamField path="extract_metadata" type="bool" default="True">
+  Whether to extract and store artifact metadata.
+</ParamField>
+
+<ParamField path="include_visualizations" type="bool" default="True">
+  Whether to generate and store artifact visualizations.
+</ParamField>
+
+<ParamField path="user_metadata" type="Dict[str, MetadataType]" optional>
+  User-provided metadata to store with the artifact.
+</ParamField>
+
+<ParamField path="materializer" type="MaterializerClassOrSource" optional>
+  The materializer to use for saving the artifact. If not provided, ZenML will select an appropriate materializer based on the data type.
+</ParamField>
+
+<ParamField path="uri" type="str" optional>
+  The URI within the artifact store to upload the artifact to. If not provided, defaults to `custom_artifacts/{name}/{version}`.
+</ParamField>
+
+## Returns
+
+<ResponseField name="artifact" type="ArtifactVersionResponse">
+  The saved artifact version response object.
+</ResponseField>
+
+## Examples
+
+### Save a Simple Artifact
+
+```python
+from zenml import save_artifact
+import pandas as pd
+
+df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+
+artifact = save_artifact(
+    data=df,
+    name="my_dataframe"
+)
+
+print(f"Saved artifact with ID: {artifact.id}")
+```
+
+### Save with Version and Tags
+
+```python
+from zenml import save_artifact
+import numpy as np
+
+array = np.array([[1, 2], [3, 4], [5, 6]])
+
+artifact = save_artifact(
+    data=array,
+    name="training_data",
+    version="v1.0.0",
+    tags=["training", "preprocessed", "2024-01"]
+)
+```
+
+### Save with Metadata
+
+```python
+from zenml import save_artifact
+import pandas as pd
+
+df = pd.DataFrame({"feature": range(1000)})
+
+artifact = save_artifact(
+    data=df,
+    name="feature_dataset",
+    user_metadata={
+        "source": "external_api",
+        "collection_date": "2024-01-15",
+        "num_features": len(df.columns),
+        "quality_score": 0.95
+    },
+    tags=["features", "validated"]
+)
+```
+
+### Save with Custom Artifact Type
+
+```python
+from zenml import save_artifact
+from zenml.enums import ArtifactType
+from sklearn.ensemble import RandomForestClassifier
+
+model = RandomForestClassifier(n_estimators=100)
+model.fit(X_train, y_train)
+
+artifact = save_artifact(
+    data=model,
+    name="random_forest_model",
+    artifact_type=ArtifactType.MODEL,
+    tags=["sklearn", "classification"],
+    user_metadata={
+        "accuracy": 0.92,
+        "n_estimators": 100
+    }
+)
+```
+
+### Save Inside a Step
+
+```python
+from zenml import step, save_artifact
+import pandas as pd
+
+@step
+def process_and_save_data() -> None:
+    # Load and process data
+    df = pd.read_csv("data.csv")
+    processed_df = df.dropna()
+    
+    # Save intermediate result
+    save_artifact(
+        data=processed_df,
+        name="intermediate_data",
+        tags=["intermediate", "cleaned"]
+    )
+    
+    # Continue with more processing
+    final_df = processed_df.reset_index(drop=True)
+    
+    # Save final result
+    save_artifact(
+        data=final_df,
+        name="final_processed_data",
+        tags=["final", "ready-for-training"]
+    )
+```
+
+### Save with Custom Materializer
+
+```python
+from zenml import save_artifact
+from zenml.materializers import BuiltInMaterializer
+import pickle
+
+class CustomObject:
+    def __init__(self, data):
+        self.data = data
+
+custom_obj = CustomObject(data={"key": "value"})
+
+artifact = save_artifact(
+    data=custom_obj,
+    name="custom_object",
+    materializer=BuiltInMaterializer
+)
+```
+
+### Save Multiple Artifacts
+
+```python
+from zenml import save_artifact
+import pandas as pd
+import numpy as np
+
+# Save training data
+train_df = pd.DataFrame({"x": range(800), "y": range(800)})
+train_artifact = save_artifact(
+    data=train_df,
+    name="experiment_data",
+    version="train",
+    tags=["training"]
+)
+
+# Save test data
+test_df = pd.DataFrame({"x": range(200), "y": range(200)})
+test_artifact = save_artifact(
+    data=test_df,
+    name="experiment_data",
+    version="test",
+    tags=["testing"]
+)
+
+# Save model weights
+weights = np.random.rand(10, 10)
+weights_artifact = save_artifact(
+    data=weights,
+    name="model_weights",
+    tags=["experiment"]
+)
+```
+
+### Optimize Performance for Large Artifacts
+
+```python
+from zenml import save_artifact
+import pandas as pd
+
+# For very large datasets, disable metadata extraction and visualization
+large_df = pd.DataFrame({"data": range(10000000)})
+
+artifact = save_artifact(
+    data=large_df,
+    name="huge_dataset",
+    extract_metadata=False,  # Skip metadata extraction
+    include_visualizations=False,  # Skip visualization generation
+    tags=["large", "raw"]
+)
+```
+
+### Version Management
+
+```python
+from zenml import save_artifact
+import pandas as pd
+
+df = pd.DataFrame({"data": [1, 2, 3]})
+
+# Save version 1
+v1 = save_artifact(data=df, name="dataset", version="1")
+
+# Update data
+df_updated = pd.DataFrame({"data": [1, 2, 3, 4, 5]})
+
+# Save version 2
+v2 = save_artifact(data=df_updated, name="dataset", version="2")
+
+# Save with auto-increment (becomes version 3)
+v3 = save_artifact(data=df_updated, name="dataset")
+```
+
+### Save and Link to Model
+
+```python
+from zenml import step, save_artifact, link_artifact_to_model, Model
+import pandas as pd
+
+@step(model=Model(name="my_model", version="1.0"))
+def create_and_link_artifact() -> None:
+    # Create artifact
+    df = pd.DataFrame({"predictions": [0.1, 0.9, 0.3]})
+    
+    artifact = save_artifact(
+        data=df,
+        name="prediction_results",
+        tags=["predictions"]
+    )
+    
+    # Link to model
+    link_artifact_to_model(artifact)
+```
+
+## Use Cases
+
+1. **Save intermediate results** during complex processing without making them official step outputs
+2. **Store debug information** for troubleshooting
+3. **Archive experiment results** for later analysis
+4. **Create versioned datasets** outside of pipeline runs
+5. **Share data between teams** by saving to a known artifact name
+6. **Checkpoint long-running processes** to enable resumption
+
+## Important Notes
+
+- Artifacts saved with `save_artifact()` are stored in the artifact store under `custom_artifacts/{name}/{uuid}` by default
+- When called inside a step, the artifact is automatically linked to the current step run and model (if configured)
+- Each artifact gets a unique URI to prevent conflicts
+- Artifacts can be loaded later using `load_artifact()` with the artifact name and optional version
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="load_artifact" href="./load-artifact" icon="download">
+    Load saved artifacts
+  </Card>
+  <Card title="register_artifact" href="./register-artifact" icon="file-check">
+    Register existing data as artifacts
+  </Card>
+  <Card title="link_artifact_to_model" href="./link-artifact-to-model" icon="link">
+    Link artifacts to models
+  </Card>
+  <Card title="ExternalArtifact" href="./external-artifact" icon="file-import">
+    Use artifacts as step inputs
+  </Card>
+</CardGroup>

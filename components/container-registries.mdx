@@ -1,0 +1,445 @@
+---
+title: Container Registries
+description: Store and manage Docker container images for containerized execution
+---
+
+# Container Registries
+
+A container registry is a store for Docker containers. A ZenML workflow involving a container registry automatically containerizes your code to be transported across stacks running remotely.
+
+## Overview
+
+When you run a pipeline with a container-based orchestrator (like Kubernetes, Kubeflow, or cloud services), ZenML:
+1. Builds a Docker image containing your code and dependencies
+2. Pushes the image to your container registry
+3. Instructs the orchestrator to pull and run the image
+
+The container registry stores these images and makes them accessible to your orchestration infrastructure.
+
+## When You Need a Container Registry
+
+A container registry is **required** when using:
+- Kubernetes orchestrator
+- Kubeflow orchestrator
+- Vertex AI orchestrator
+- SageMaker orchestrator
+- Azure ML orchestrator
+- Any other container-based orchestrator
+
+A container registry is **not required** for:
+- Local orchestrator
+- Airflow orchestrator (unless using KubernetesPodOperator)
+
+## Available Container Registries
+
+### Default Container Registry
+
+A simple registry that works with any Docker registry without additional configuration.
+
+**Configuration:**
+```bash
+zenml container-registry register default_registry --flavor=default \
+  --uri=<registry-uri>
+```
+
+**Example with Docker Hub:**
+```bash
+zenml container-registry register dockerhub_registry --flavor=default \
+  --uri=docker.io/myusername
+```
+
+**Authentication:**
+Requires `docker login` on the machine running ZenML.
+
+### DockerHub Container Registry
+
+Dedicated flavor for Docker Hub with built-in authentication support.
+
+**Configuration:**
+```bash
+zenml container-registry register dockerhub --flavor=dockerhub \
+  --uri=docker.io/myusername
+```
+
+**Authentication:**
+```bash
+# Option 1: Docker login
+docker login
+
+# Option 2: Service connector
+zenml service-connector register dockerhub_connector --type docker \
+  --auth-method=password \
+  --username=<username> \
+  --password=<password>
+
+zenml container-registry register dockerhub --flavor=dockerhub \
+  --uri=docker.io/myusername \
+  --connector dockerhub_connector
+```
+
+**Use cases:**
+- Public image sharing
+- Open source projects
+- Quick prototyping
+- Free tier for public repositories
+
+### Google Container Registry (GCR)
+
+Google Cloud's container registry service.
+
+**Installation:**
+```bash
+zenml integration install gcp
+```
+
+**Configuration:**
+```bash
+zenml container-registry register gcr --flavor=gcp \
+  --uri=gcr.io/my-project
+```
+
+**Artifact Registry (newer GCP service):**
+```bash
+zenml container-registry register gar --flavor=gcp \
+  --uri=us-central1-docker.pkg.dev/my-project/my-repo
+```
+
+**Authentication:**
+```bash
+# Option 1: gcloud CLI
+gcloud auth configure-docker
+
+# Option 2: Service connector
+zenml service-connector register gcp_connector --type gcp \
+  --auth-method=service-account \
+  --service_account_json=@/path/to/key.json
+
+zenml container-registry register gcr --flavor=gcp \
+  --uri=gcr.io/my-project \
+  --connector gcp_connector
+```
+
+**Use cases:**
+- GCP-based infrastructure
+- Integration with Vertex AI
+- Google Cloud ecosystem
+- Multi-region replication
+
+### Azure Container Registry (ACR)
+
+Microsoft Azure's container registry service.
+
+**Installation:**
+```bash
+zenml integration install azure
+```
+
+**Configuration:**
+```bash
+zenml container-registry register acr --flavor=azure \
+  --uri=myregistry.azurecr.io
+```
+
+**Authentication:**
+```bash
+# Option 1: Azure CLI
+az acr login --name myregistry
+
+# Option 2: Service connector
+zenml service-connector register azure_connector --type azure \
+  --auth-method=service-principal \
+  --tenant_id=<tenant> \
+  --client_id=<client> \
+  --client_secret=<secret>
+
+zenml container-registry register acr --flavor=azure \
+  --uri=myregistry.azurecr.io \
+  --connector azure_connector
+```
+
+**Use cases:**
+- Azure-based ML infrastructure
+- Integration with Azure ML
+- Enterprise Azure deployments
+- Geo-replication requirements
+
+### Amazon Elastic Container Registry (ECR)
+
+AWS's container registry service.
+
+**Installation:**
+```bash
+zenml integration install aws
+```
+
+**Configuration:**
+```bash
+zenml container-registry register ecr --flavor=aws \
+  --uri=<account-id>.dkr.ecr.<region>.amazonaws.com
+```
+
+**Example:**
+```bash
+zenml container-registry register ecr --flavor=aws \
+  --uri=123456789012.dkr.ecr.us-east-1.amazonaws.com
+```
+
+**Authentication:**
+```bash
+# Option 1: AWS CLI
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin \
+  123456789012.dkr.ecr.us-east-1.amazonaws.com
+
+# Option 2: Service connector
+zenml service-connector register aws_connector --type aws \
+  --auth-method=secret-key \
+  --aws_access_key_id=<key> \
+  --aws_secret_access_key=<secret>
+
+zenml container-registry register ecr --flavor=aws \
+  --uri=123456789012.dkr.ecr.us-east-1.amazonaws.com \
+  --connector aws_connector
+```
+
+**Use cases:**
+- AWS-based infrastructure
+- Integration with SageMaker
+- EKS deployments
+- Cross-region replication
+
+### GitHub Container Registry
+
+GitHub's container registry service, integrated with GitHub repositories.
+
+**Configuration:**
+```bash
+zenml container-registry register ghcr --flavor=github \
+  --uri=ghcr.io/myusername
+```
+
+**Authentication:**
+```bash
+# Login with personal access token
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+
+# Or use service connector
+zenml service-connector register github_connector --type docker \
+  --auth-method=password \
+  --username=<github-username> \
+  --password=<github-token>
+
+zenml container-registry register ghcr --flavor=github \
+  --uri=ghcr.io/myusername \
+  --connector github_connector
+```
+
+**Use cases:**
+- GitHub-based workflows
+- Open source projects
+- CI/CD integration with GitHub Actions
+- Free for public repositories
+
+## Choosing a Container Registry
+
+| Registry | Best For | Key Features | Cost |
+|----------|----------|--------------|------|
+| **Docker Hub** | Quick start, public projects | Simple, widely supported | Free tier available |
+| **GCR/GAR** | GCP infrastructure | GCP integration, global | Pay per GB stored |
+| **ECR** | AWS infrastructure | AWS integration, private | Pay per GB stored |
+| **ACR** | Azure infrastructure | Azure integration, geo-replication | Pay per GB stored |
+| **GitHub** | GitHub workflows | GitHub integration, CI/CD | Free for public repos |
+
+## Image Building
+
+### Automatic Image Building
+
+ZenML automatically builds Docker images when you run a pipeline:
+
+```python
+from zenml import pipeline
+
+@pipeline
+def my_pipeline():
+    # ZenML builds and pushes image automatically
+    ...
+
+if __name__ == "__main__":
+    my_pipeline()
+```
+
+### Custom Docker Configuration
+
+You can customize the Docker build:
+
+```python
+from zenml import pipeline
+from zenml.config import DockerSettings
+
+docker_settings = DockerSettings(
+    parent_image="python:3.9-slim",
+    requirements=["pandas==1.5.0", "scikit-learn==1.2.0"],
+    dockerfile="Dockerfile.custom",
+)
+
+@pipeline(settings={"docker": docker_settings})
+def my_pipeline():
+    ...
+```
+
+### Build Strategies
+
+ZenML supports different build strategies:
+
+**Local builds** (default):
+```python
+docker_settings = DockerSettings(build_strategy="local")
+```
+
+**Kaniko builds** (for Kubernetes):
+```bash
+zenml integration install kaniko
+```
+
+```python
+from zenml.integrations.kaniko.image_builders import KanikoImageBuilderSettings
+
+kaniko_settings = KanikoImageBuilderSettings()
+```
+
+## Image Management
+
+### Image Naming
+
+ZenML uses a consistent naming convention:
+```
+<registry-uri>/<pipeline-name>:<version>
+```
+
+Example:
+```
+gcr.io/my-project/training_pipeline:2024-01-15-10-30-45
+```
+
+### Image Caching
+
+ZenML caches Docker layers to speed up builds:
+- Only rebuilds when code or dependencies change
+- Reuses base images across pipelines
+- Supports Docker BuildKit for faster builds
+
+### Image Cleanup
+
+Clean up old images to save storage:
+
+```bash
+# Docker Hub
+docker image prune -a
+
+# GCR
+gcloud container images list-tags gcr.io/my-project/my-image \
+  --format="get(digest)" --filter="timestamp.datetime<2024-01-01" | \
+  xargs -I {} gcloud container images delete gcr.io/my-project/my-image@{} --quiet
+
+# ECR
+aws ecr list-images --repository-name my-repo \
+  --filter tagStatus=UNTAGGED --query 'imageIds[*]' \
+  --output json | jq -r '.[] | .imageDigest' | \
+  xargs -I {} aws ecr batch-delete-image \
+  --repository-name my-repo --image-ids imageDigest={}
+```
+
+## Security Best Practices
+
+### Use Service Connectors
+
+Prefer service connectors over hardcoded credentials:
+
+```bash
+zenml service-connector register my_connector --type <cloud> \
+  --auth-method=<method> \
+  --<credential-params>
+
+zenml container-registry register my_registry --flavor=<flavor> \
+  --uri=<uri> \
+  --connector my_connector
+```
+
+### Scan Images for Vulnerabilities
+
+Use container scanning tools:
+- **Trivy**: `trivy image <image-name>`
+- **Snyk**: `snyk container test <image-name>`
+- **Cloud provider tools**: GCR Vulnerability Scanning, ECR Image Scanning, ACR Defender
+
+### Use Private Registries
+
+For production workloads:
+- Keep images in private registries
+- Use IAM/RBAC for access control
+- Enable audit logging
+- Implement image signing
+
+### Minimize Image Size
+
+```python
+docker_settings = DockerSettings(
+    parent_image="python:3.9-slim",  # Use slim images
+    apt_packages=["git"],  # Only necessary packages
+    requirements=["pandas", "scikit-learn"],  # Minimal dependencies
+)
+```
+
+## Troubleshooting
+
+### Authentication Failures
+
+```bash
+# Verify docker login
+docker info | grep Username
+
+# Re-authenticate
+docker logout <registry>
+docker login <registry>
+```
+
+### Build Failures
+
+```bash
+# Enable verbose logging
+export ZENML_LOGGING_VERBOSITY=DEBUG
+
+# Check Docker daemon
+docker ps
+
+# Clean build cache
+docker builder prune
+```
+
+### Push Failures
+
+```bash
+# Check registry permissions
+# GCP
+gcloud auth list
+gcloud projects get-iam-policy <project>
+
+# AWS
+aws ecr describe-repositories
+aws sts get-caller-identity
+
+# Azure
+az acr check-health --name <registry>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Orchestrators" icon="diagram-project" href="/components/orchestrators">
+    Configure pipeline orchestration
+  </Card>
+  
+  <Card title="Model Deployers" icon="rocket" href="/components/model-deployers">
+    Deploy models for inference
+  </Card>
+</CardGroup>

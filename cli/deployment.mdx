@@ -1,0 +1,511 @@
+---
+title: zenml deployment
+description: Manage long-running pipeline deployments via the CLI.
+---
+
+The `zenml deployment` command group manages persistent pipeline deployments that run continuously or on schedules.
+
+## Overview
+
+Deployments are different from regular pipeline runs:
+
+- **Pipeline Runs**: Execute once and finish
+- **Deployments**: Remain active and execute pipelines on triggers (schedules, events, webhooks)
+
+Deployments enable:
+- Scheduled pipeline execution (daily, weekly, cron expressions)
+- Continuous inference pipelines
+- Webhook-triggered pipelines
+- Long-running model serving
+
+<Note>
+Deployments require an orchestrator that supports them (e.g., Kubernetes, Kubeflow, Airflow).
+</Note>
+
+## Command Structure
+
+```bash
+zenml deployment <command> [OPTIONS] [ARGUMENTS]
+```
+
+## Core Commands
+
+### List Deployments
+
+View all registered deployments:
+
+```bash
+zenml deployment list [OPTIONS]
+```
+
+**Default columns:** `id`, `name`, `status`, `url`, `pipeline`, `stack`
+
+**Filter options:**
+
+| Option | Description |
+|--------|-------------|
+| `--name` | Filter by deployment name |
+| `--pipeline` | Filter by pipeline name or ID |
+| `--stack` | Filter by stack name or ID |
+| `--status` | Filter by status (active, inactive, failed) |
+| `--user` | Filter by user |
+| `--created` | Filter by creation date |
+| `--columns` | Customize displayed columns |
+| `--output`, `-o` | Output format (table, json, yaml, csv, tsv) |
+| `--sort_by` | Sort results |
+
+**Examples:**
+
+```bash
+# List all deployments
+zenml deployment list
+
+# Filter by pipeline
+zenml deployment list --pipeline training_pipeline
+
+# Filter by status
+zenml deployment list --status active
+
+# Custom columns
+zenml deployment list --columns id,name,status,created
+
+# Export to JSON
+zenml deployment list --output json
+
+# Sort by creation date
+zenml deployment list --sort_by "desc:created"
+
+# Multiple filters
+zenml deployment list --pipeline inference_pipeline --status active --stack production
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━┓
+┃ ID       │ Name                │ Status  │ URL                       │ Pipeline           │ Stack      ┃
+┠──────────┼─────────────────────┼─────────┼───────────────────────────┼────────────────────┼────────────┨
+┃ 1a2b3c4d │ daily-training      │ active  │ https://dashboard/d/1a... │ training_pipeline  │ production ┃
+┃ 5e6f7g8h │ inference-service   │ active  │ https://dashboard/d/5e... │ inference_pipeline │ production ┃
+┃ 9i0j1k2l │ weekly-report       │ active  │ https://dashboard/d/9i... │ report_pipeline    │ staging    ┃
+┗━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━┛
+```
+
+### Describe a Deployment
+
+View detailed information about a specific deployment:
+
+```bash
+zenml deployment describe <DEPLOYMENT_NAME_OR_ID> [OPTIONS]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--show-secret`, `-s` | Display secret configuration values |
+| `--show-metadata`, `-m` | Show deployment metadata |
+| `--show-schema`, `-sc` | Show the deployment schema |
+| `--no-truncate`, `-nt` | Don't truncate long values |
+
+**Examples:**
+
+```bash
+# Basic description
+zenml deployment describe daily-training
+
+# Show all details
+zenml deployment describe daily-training --show-metadata --show-schema
+
+# Show secrets
+zenml deployment describe daily-training --show-secret
+
+# No truncation for long values
+zenml deployment describe daily-training --show-metadata --no-truncate
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃         Deployment: daily-training                ┃
+┠───────────────────────────────────────────────────┨
+┃ ID              │ 1a2b3c4d-e5f6-7890-abcd-...    ┃
+┃ Name            │ daily-training                  ┃
+┃ Status          │ active                          ┃
+┃ Pipeline        │ training_pipeline               ┃
+┃ Stack           │ production                      ┃
+┃ Created         │ 2024-01-15 10:30:00            ┃
+┃ Updated         │ 2024-03-09 08:00:00            ┃
+┃ Schedule        │ 0 2 * * * (daily at 2 AM UTC)  ┃
+┃ Dashboard URL   │ https://dashboard/d/1a2b3c4d   ┃
+┠───────────────────────────────────────────────────┨
+┃ Configuration                                     ┃
+┠───────────────────────────────────────────────────┨
+┃ enable_cache    │ true                            ┃
+┃ retries         │ 3                               ┃
+┃ timeout         │ 3600                            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### Delete a Deployment
+
+Remove a deployment:
+
+```bash
+zenml deployment delete <DEPLOYMENT_NAME_OR_ID>
+```
+
+**Example:**
+
+```bash
+zenml deployment delete daily-training
+```
+
+<Warning>
+Deleting a deployment stops all scheduled executions and removes the deployment configuration. This action cannot be undone.
+</Warning>
+
+## Deployment Lifecycle
+
+### Creating Deployments
+
+Deployments are typically created using the `zenml pipeline deploy` command:
+
+```bash
+zenml pipeline deploy <SOURCE> --name <DEPLOYMENT_NAME> [OPTIONS]
+```
+
+See the [pipeline CLI documentation](/cli/pipeline) for details.
+
+**Example:**
+
+```bash
+zenml pipeline deploy my_module.training_pipeline --name daily-training
+```
+
+### Deployment Status
+
+Deployments can have these statuses:
+
+| Status | Description |
+|--------|-------------|
+| `active` | Deployment is running and will execute on schedule/trigger |
+| `inactive` | Deployment is stopped and won't execute |
+| `failed` | Deployment encountered an error |
+| `starting` | Deployment is being initialized |
+| `stopping` | Deployment is being shut down |
+
+### Managing Active Deployments
+
+View and filter active deployments:
+
+```bash
+# List only active deployments
+zenml deployment list --status active
+
+# Find deployments that may have issues
+zenml deployment list --status failed
+
+# Check specific pipeline's deployments
+zenml deployment list --pipeline inference_pipeline --status active
+```
+
+## Deployment Configuration
+
+Deployments support various configuration options typically specified in the configuration file used during deployment:
+
+### Schedule Configuration
+
+```yaml
+# deploy_config.yaml
+schedule:
+  cron_expression: "0 2 * * *"  # Daily at 2 AM UTC
+  catchup: false  # Don't run missed executions
+  start_time: "2024-01-01T00:00:00Z"
+  end_time: "2024-12-31T23:59:59Z"
+```
+
+### Retry Configuration
+
+```yaml
+# deploy_config.yaml
+retries: 3
+retry_delay_seconds: 300  # 5 minutes
+timeout_seconds: 7200  # 2 hours
+```
+
+### Resource Configuration
+
+```yaml
+# deploy_config.yaml
+resources:
+  cpu_count: 4
+  memory: "16GB"
+  gpu_count: 1
+```
+
+## Common Use Cases
+
+### Scheduled Training Pipeline
+
+Deploy a training pipeline to run daily:
+
+```bash
+# Create schedule configuration
+cat > schedule_config.yaml << EOF
+schedule:
+  cron_expression: "0 2 * * *"  # 2 AM daily
+  catchup: false
+enable_cache: true
+EOF
+
+# Deploy pipeline
+zenml pipeline deploy my_module.training_pipeline \
+  --name daily-training \
+  --config schedule_config.yaml \
+  --stack production
+
+# Verify deployment
+zenml deployment list --name daily-training
+```
+
+### Continuous Inference Service
+
+Deploy an inference pipeline that runs continuously:
+
+```bash
+zenml pipeline deploy my_module.inference_pipeline \
+  --name inference-service \
+  --config inference_config.yaml
+
+zenml deployment describe inference-service
+```
+
+### Weekly Report Generation
+
+Schedule a weekly reporting pipeline:
+
+```bash
+cat > weekly_report.yaml << EOF
+schedule:
+  cron_expression: "0 9 * * 1"  # Monday at 9 AM
+EOF
+
+zenml pipeline deploy my_module.report_pipeline \
+  --name weekly-report \
+  --config weekly_report.yaml
+```
+
+## Monitoring Deployments
+
+### Check Deployment Health
+
+```bash
+# List active deployments
+zenml deployment list --status active
+
+# Check for failures
+zenml deployment list --status failed
+
+# Inspect specific deployment
+zenml deployment describe <deployment-name> --show-metadata
+```
+
+### View Deployment Runs
+
+See pipeline runs triggered by a deployment:
+
+```bash
+# List runs for a specific deployment
+zenml pipeline runs list --deployment <deployment-name>
+
+# Check recent deployment runs
+zenml pipeline runs list \
+  --deployment <deployment-name> \
+  --sort_by "desc:created" \
+  --limit 10
+```
+
+### Export Deployment Data
+
+Export deployment information for analysis:
+
+```bash
+# Export as JSON
+zenml deployment list --output json > deployments.json
+
+# Export as CSV
+zenml deployment list --output csv > deployments.csv
+
+# Filter and export
+zenml deployment list --status active --pipeline training_pipeline --output json
+```
+
+## Cron Expression Examples
+
+Common cron schedules for deployments:
+
+| Schedule | Cron Expression | Description |
+|----------|----------------|-------------|
+| Every hour | `0 * * * *` | Top of every hour |
+| Every day at 2 AM | `0 2 * * *` | Daily at 2:00 AM UTC |
+| Every Monday at 9 AM | `0 9 * * 1` | Weekly on Monday morning |
+| Every weekday at 6 PM | `0 18 * * 1-5` | Monday-Friday at 6:00 PM |
+| First day of month | `0 0 1 * *` | Monthly at midnight |
+| Every 15 minutes | `*/15 * * * *` | Four times per hour |
+| Twice daily | `0 6,18 * * *` | 6:00 AM and 6:00 PM |
+
+<Note>
+Cron expressions use UTC timezone by default. Convert your local time to UTC when scheduling.
+</Note>
+
+## Troubleshooting
+
+### Deployment Not Executing
+
+If a deployment isn't running as expected:
+
+1. **Check status**:
+   ```bash
+   zenml deployment describe <deployment-name>
+   ```
+
+2. **Verify schedule** (if applicable):
+   ```bash
+   zenml deployment describe <deployment-name> --show-metadata
+   ```
+
+3. **Check recent runs**:
+   ```bash
+   zenml pipeline runs list --deployment <deployment-name> --limit 5
+   ```
+
+4. **Verify orchestrator**: Ensure your orchestrator supports deployments:
+   ```bash
+   zenml stack describe
+   ```
+
+### Deployment Failed Status
+
+For failed deployments:
+
+```bash
+# Get detailed information
+zenml deployment describe <deployment-name> --show-metadata
+
+# Check error logs in recent runs
+zenml pipeline runs describe <latest-run-id>
+
+# Delete and recreate if needed
+zenml deployment delete <deployment-name>
+zenml pipeline deploy <source> --name <deployment-name> --config <config>
+```
+
+### Updating Deployments
+
+To update a deployment:
+
+```bash
+# Delete old deployment
+zenml deployment delete old-deployment
+
+# Create new deployment with updated configuration
+zenml pipeline deploy my_module.pipeline --name new-deployment --config updated_config.yaml
+```
+
+Or use the `--update` flag when deploying:
+
+```bash
+zenml pipeline deploy my_module.pipeline --name existing-deployment --config new_config.yaml --update
+```
+
+## Best Practices
+
+### Naming Conventions
+
+Use descriptive names that indicate purpose and schedule:
+
+```bash
+daily-training-prod
+weekly-batch-inference
+hourly-data-refresh
+continuous-monitoring
+```
+
+### Configuration Management
+
+Keep deployment configurations in version control:
+
+```bash
+# Store configs in repo
+mkdir deployment-configs
+cat > deployment-configs/daily-training.yaml << EOF
+schedule:
+  cron_expression: "0 2 * * *"
+enable_cache: true
+retries: 3
+EOF
+
+# Deploy using versioned config
+zenml pipeline deploy my_module.pipeline \
+  --name daily-training \
+  --config deployment-configs/daily-training.yaml
+```
+
+### Monitoring and Alerts
+
+Regularly check deployment health:
+
+```bash
+# Create monitoring script
+cat > check_deployments.sh << 'EOF'
+#!/bin/bash
+echo "Active Deployments:"
+zenml deployment list --status active
+echo ""
+echo "Failed Deployments:"
+zenml deployment list --status failed
+EOF
+
+chmod +x check_deployments.sh
+./check_deployments.sh
+```
+
+### Testing Before Production
+
+Test deployments on staging before production:
+
+```bash
+# Test on staging
+zenml pipeline deploy my_module.pipeline \
+  --name test-deployment \
+  --stack staging \
+  --config test_config.yaml
+
+# Verify it works
+zenml deployment describe test-deployment
+
+# Deploy to production
+zenml pipeline deploy my_module.pipeline \
+  --name prod-deployment \
+  --stack production \
+  --config prod_config.yaml
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pipeline Commands" icon="diagram-project" href="/cli/pipeline">
+    Learn about deploying pipelines
+  </Card>
+  <Card title="Stack Configuration" icon="layer-group" href="/cli/stack">
+    Configure orchestrators that support deployments
+  </Card>
+  <Card title="Schedules Guide" icon="calendar">
+    Deep dive into scheduling options
+  </Card>
+  <Card title="Monitoring & Observability" icon="chart-line">
+    Track deployment performance and health
+  </Card>
+</CardGroup>

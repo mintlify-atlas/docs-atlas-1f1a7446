@@ -1,0 +1,501 @@
+---
+title: Kubeflow Integration
+description: Run ZenML pipelines with Kubeflow Pipelines orchestration
+---
+
+The Kubeflow integration enables running ZenML pipelines using Kubeflow Pipelines (KFP) v2, providing advanced orchestration features on Kubernetes clusters.
+
+## Installation
+
+```bash
+pip install "zenml[kubeflow]"
+```
+
+This installs:
+- `kfp>=2.6.0` - Kubeflow Pipelines SDK v2
+- `kfp-kubernetes>=1.1.0` - Kubernetes-specific KFP extensions
+
+## Available Components
+
+The Kubeflow integration provides:
+
+<Card title="Kubeflow Orchestrator" icon="diagram-project">
+  Execute complete pipelines using Kubeflow Pipelines on Kubernetes
+</Card>
+
+## Kubeflow Orchestrator
+
+The Kubeflow orchestrator compiles ZenML pipelines into KFP format and executes them on a Kubeflow Pipelines deployment.
+
+### Prerequisites
+
+Before using the Kubeflow orchestrator:
+
+1. **Kubernetes cluster** with Kubeflow Pipelines installed
+2. **kubectl access** configured
+3. **Container registry** accessible from the cluster
+4. **Artifact store** accessible from the cluster (S3, GCS, etc.)
+
+### Installing Kubeflow Pipelines
+
+**Standalone KFP (Recommended):**
+
+```bash
+# Install KFP standalone (without full Kubeflow)
+export PIPELINE_VERSION=2.0.5
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=$PIPELINE_VERSION"
+kubectl wait --for condition=established --timeout=60s crd/applications.app.k8s.io
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=$PIPELINE_VERSION"
+```
+
+**Full Kubeflow:**
+
+Follow the [official Kubeflow installation guide](https://www.kubeflow.org/docs/started/installing-kubeflow/).
+
+### Configuration
+
+```bash
+zenml orchestrator register kubeflow-orch \
+    --flavor=kubeflow \
+    --kubernetes_context=my-k8s-context \
+    --kubernetes_namespace=kubeflow \
+    --kubeflow_hostname=https://kubeflow.example.com
+```
+
+**Required Parameters:**
+- None (uses defaults if running from within the cluster)
+
+**Optional Parameters:**
+- `kubernetes_context` - kubectl context name (defaults to current context)
+- `kubernetes_namespace` - Namespace for KFP (default: `kubeflow`)
+- `kubeflow_hostname` - KFP API endpoint URL
+- `synchronous` - Wait for pipeline completion (default: `True`)
+- `skip_local_validations` - Skip kubectl checks (default: `False`)
+- `skip_ui_daemon_provisioning` - Don't start local UI proxy (default: `False`)
+
+### Access Patterns
+
+**Local Access (Port Forwarding):**
+
+```bash
+# Port forward to KFP API
+kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
+
+# Configure orchestrator
+zenml orchestrator register kubeflow-local \
+    --flavor=kubeflow \
+    --kubeflow_hostname=http://localhost:8080
+```
+
+**Direct Access (LoadBalancer/Ingress):**
+
+```bash
+zenml orchestrator register kubeflow-prod \
+    --flavor=kubeflow \
+    --kubeflow_hostname=https://kubeflow.mycompany.com
+```
+
+**In-Cluster Access:**
+
+When running ZenML from within the same Kubernetes cluster:
+
+```bash
+zenml orchestrator register kubeflow-in-cluster \
+    --flavor=kubeflow \
+    --kubernetes_namespace=kubeflow
+# No hostname needed - uses cluster service DNS
+```
+
+### Step-Level Pod Configuration
+
+Customize Kubernetes Pods for individual steps using `KubernetesPodSettings`:
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.kubernetes.pod_settings import KubernetesPodSettings
+
+@step(
+    settings={
+        "orchestrator.kubernetes": KubernetesPodSettings(
+            node_selectors={"accelerator": "nvidia-tesla-v100"},
+            resources={
+                "requests": {"memory": "16Gi", "cpu": "4"},
+                "limits": {"memory": "16Gi", "cpu": "4", "nvidia.com/gpu": "1"},
+            },
+            tolerations=[
+                {
+                    "key": "nvidia.com/gpu",
+                    "operator": "Exists",
+                    "effect": "NoSchedule",
+                }
+            ],
+            labels={"team": "ml-ops", "project": "recommendation"},
+            annotations={"sidecar.istio.io/inject": "false"},
+        )
+    }
+)
+def train_model(data: pd.DataFrame) -> Model:
+    # Training with GPU
+    ...
+
+@step(
+    settings={
+        "orchestrator.kubernetes": KubernetesPodSettings(
+            resources={
+                "requests": {"memory": "4Gi", "cpu": "2"},
+            },
+        )
+    }
+)
+def preprocess_data() -> pd.DataFrame:
+    # Lightweight preprocessing
+    ...
+
+@pipeline
+def training_pipeline():
+    data = preprocess_data()
+    train_model(data)
+```
+
+### Pipeline Caching
+
+Kubeflow Pipelines supports execution caching:
+
+```python
+from zenml import pipeline
+
+@pipeline(enable_cache=True)  # Default behavior
+def my_pipeline():
+    # Steps with identical inputs will be cached
+    ...
+
+@pipeline(enable_cache=False)
+def no_cache_pipeline():
+    # Always re-execute all steps
+    ...
+```
+
+Caching behavior:
+- Caches at the step level based on inputs and code
+- Cached results are reused across pipeline runs
+- Cache is stored in the KFP backend
+- Disable caching for non-deterministic steps
+
+### Resource Management
+
+**CPU and Memory:**
+
+```python
+KubernetesPodSettings(
+    resources={
+        "requests": {
+            "cpu": "2",      # 2 cores guaranteed
+            "memory": "8Gi",  # 8GB guaranteed
+        },
+        "limits": {
+            "cpu": "4",      # Max 4 cores
+            "memory": "16Gi", # Max 16GB (OOMKilled if exceeded)
+        },
+    }
+)
+```
+
+**GPUs:**
+
+```python
+KubernetesPodSettings(
+    resources={
+        "limits": {
+            "nvidia.com/gpu": "2",  # Request 2 GPUs
+        }
+    },
+    node_selectors={
+        "cloud.google.com/gke-accelerator": "nvidia-tesla-v100",
+    },
+    tolerations=[
+        {
+            "key": "nvidia.com/gpu",
+            "operator": "Exists",
+            "effect": "NoSchedule",
+        }
+    ],
+)
+```
+
+### Volume Mounts
+
+**Persistent Volumes:**
+
+```python
+KubernetesPodSettings(
+    volumes=[
+        {
+            "name": "data-volume",
+            "persistentVolumeClaim": {
+                "claimName": "ml-training-data",
+            },
+        }
+    ],
+    volume_mounts=[
+        {
+            "name": "data-volume",
+            "mountPath": "/mnt/data",
+        }
+    ],
+)
+```
+
+**Secrets:**
+
+```python
+KubernetesPodSettings(
+    volumes=[
+        {
+            "name": "credentials",
+            "secret": {"secretName": "aws-credentials"},
+        }
+    ],
+    volume_mounts=[
+        {
+            "name": "credentials",
+            "mountPath": "/etc/secrets",
+            "readOnly": True,
+        }
+    ],
+)
+```
+
+## Complete Stack Example
+
+```bash
+# Register components
+zenml container-registry register gcr-registry \
+    --flavor=gcp \
+    --uri=gcr.io/my-project
+
+zenml artifact-store register gcs-store \
+    --flavor=gcp \
+    --path=gs://my-zenml-artifacts
+
+zenml orchestrator register kubeflow-prod \
+    --flavor=kubeflow \
+    --kubernetes_context=prod-cluster \
+    --kubernetes_namespace=kubeflow \
+    --kubeflow_hostname=https://kubeflow.mycompany.com
+
+# Create stack
+zenml stack register kubeflow-stack \
+    -o kubeflow-prod \
+    -a gcs-store \
+    -c gcr-registry
+
+# Activate
+zenml stack set kubeflow-stack
+```
+
+## Authentication
+
+### Service Account Setup
+
+Create a Kubernetes service account for pipelines:
+
+```yaml
+# zenml-kfp-sa.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zenml-pipeline-sa
+  namespace: kubeflow
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: zenml-pipeline-role
+  namespace: kubeflow
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: zenml-pipeline-binding
+  namespace: kubeflow
+subjects:
+  - kind: ServiceAccount
+    name: zenml-pipeline-sa
+    namespace: kubeflow
+roleRef:
+  kind: Role
+  name: zenml-pipeline-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Apply and configure:
+
+```bash
+kubectl apply -f zenml-kfp-sa.yaml
+```
+
+```python
+KubernetesPodSettings(service_account_name="zenml-pipeline-sa")
+```
+
+## UI Access
+
+Access the Kubeflow Pipelines UI to monitor runs:
+
+**Port Forwarding:**
+
+```bash
+kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
+# Visit http://localhost:8080
+```
+
+**ZenML Dashboard Integration:**
+
+Pipeline runs automatically link to the KFP UI in the ZenML dashboard.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Minimal Docker Images">
+    Reduce pull times with slim images:
+    
+    ```dockerfile
+    # Use slim base images
+    FROM python:3.10-slim
+    
+    # Install only required dependencies
+    RUN pip install --no-cache-dir zenml[kubeflow]
+    ```
+  </Accordion>
+
+  <Accordion title="Set Resource Limits">
+    Always set resource limits to prevent resource exhaustion:
+    
+    ```python
+    KubernetesPodSettings(
+        resources={
+            "requests": {"cpu": "1", "memory": "2Gi"},
+            "limits": {"cpu": "2", "memory": "4Gi"},
+        }
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Use Node Affinity for GPU Jobs">
+    Ensure GPU jobs land on GPU nodes:
+    
+    ```python
+    KubernetesPodSettings(
+        affinity={
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {
+                                    "key": "accelerator",
+                                    "operator": "In",
+                                    "values": ["gpu"],
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Pipeline Caching Selectively">
+    Disable caching for non-deterministic steps:
+    
+    ```python
+    @step(enable_cache=False)
+    def download_latest_data() -> pd.DataFrame:
+        # Always fetch fresh data
+        ...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pipeline Compilation Fails">
+    If pipeline compilation errors occur:
+    
+    1. Check KFP version compatibility (`kfp>=2.6.0`)
+    2. Verify all steps have proper type hints
+    3. Ensure materializers exist for custom types
+    4. Check ZenML version matches integration version
+  </Accordion>
+
+  <Accordion title="Pods Stuck in Pending">
+    If pods don't start:
+    
+    1. Check node resources: `kubectl describe nodes`
+    2. View pod events: `kubectl describe pod -n kubeflow`
+    3. Verify image pull secrets are configured
+    4. Check resource requests vs. available capacity
+  </Accordion>
+
+  <Accordion title="Cannot Connect to KFP API">
+    If orchestrator can't reach KFP:
+    
+    1. Verify port forwarding is active
+    2. Check `kubeflow_hostname` URL is correct
+    3. Ensure firewall rules allow access
+    4. Test with `curl $KUBEFLOW_HOSTNAME`
+  </Accordion>
+
+  <Accordion title="Artifact Loading Fails">
+    If steps can't load artifacts:
+    
+    1. Ensure artifact store is accessible from cluster
+    2. Check service account has storage permissions
+    3. Verify network policies allow egress
+    4. For cloud storage, check credentials are mounted
+  </Accordion>
+</AccordionGroup>
+
+## Differences from Kubernetes Orchestrator
+
+Kubeflow vs. native Kubernetes orchestrator:
+
+| Feature | Kubeflow | Kubernetes |
+|---------|----------|------------|
+| UI | KFP dashboard | None (kubectl only) |
+| Pipeline DAG visualization | ✓ | ✗ |
+| Caching | Built-in | Manual |
+| Execution engine | Argo Workflows | Direct Jobs |
+| Scheduling | Advanced | Basic |
+| Monitoring | Extensive | Basic |
+| Setup complexity | Higher | Lower |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Kubernetes Integration" href="./kubernetes">
+    Compare with native Kubernetes orchestrator
+  </Card>
+  <Card title="Container Registries" href="../stack-components/container-registries">
+    Configure image registries
+  </Card>
+  <Card title="Remote Execution" href="../user-guide/production">
+    Production deployment patterns
+  </Card>
+  <Card title="Kubeflow Docs" href="https://www.kubeflow.org/docs/components/pipelines/">
+    Official Kubeflow Pipelines documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,311 @@
+---
+title: "link_artifact_to_model"
+description: "Link artifacts to model versions"
+icon: "link"
+---
+
+The `link_artifact_to_model()` function creates a connection between an artifact version and a model version in the Model Control Plane.
+
+## Signature
+
+```python
+def link_artifact_to_model(
+    artifact_version: ArtifactVersionResponse,
+    model: Optional[Model] = None,
+) -> None
+```
+
+## Parameters
+
+<ParamField path="artifact_version" type="ArtifactVersionResponse" required>
+  The artifact version to link. This is typically obtained from `save_artifact()` or `register_artifact()`.
+</ParamField>
+
+<ParamField path="model" type="Model" optional>
+  The model to link the artifact to. If not provided, the model is inferred from the current step context.
+</ParamField>
+
+## Examples
+
+### Link in Step with Model Context
+
+```python
+from zenml import step, save_artifact, link_artifact_to_model, Model
+import pandas as pd
+
+@step(model=Model(name="iris_classifier", version="1.0"))
+def create_and_link_data() -> None:
+    # Create some data
+    df = pd.DataFrame({"feature": range(100), "label": range(100)})
+    
+    # Save as artifact
+    artifact = save_artifact(
+        data=df,
+        name="validation_data"
+    )
+    
+    # Link to the model (model inferred from step context)
+    link_artifact_to_model(artifact)
+```
+
+### Link with Explicit Model
+
+```python
+from zenml import save_artifact, link_artifact_to_model, Model
+import numpy as np
+
+# Create and save an artifact
+weights = np.random.rand(10, 10)
+artifact = save_artifact(
+    data=weights,
+    name="model_weights"
+)
+
+# Link to specific model
+model = Model(name="my_model", version="2.0")
+link_artifact_to_model(
+    artifact_version=artifact,
+    model=model
+)
+```
+
+### Link Multiple Artifacts
+
+```python
+from zenml import step, save_artifact, link_artifact_to_model, Model
+import pandas as pd
+import numpy as np
+
+@step(model=Model(name="sentiment_model", version="3.0"))
+def prepare_model_assets() -> None:
+    # Save training data
+    train_data = pd.DataFrame({"text": ["sample"], "label": [1]})
+    train_artifact = save_artifact(
+        data=train_data,
+        name="training_data"
+    )
+    link_artifact_to_model(train_artifact)
+    
+    # Save vocabulary
+    vocab = {"word1": 0, "word2": 1}
+    vocab_artifact = save_artifact(
+        data=vocab,
+        name="vocabulary"
+    )
+    link_artifact_to_model(vocab_artifact)
+    
+    # Save embeddings
+    embeddings = np.random.rand(100, 300)
+    embed_artifact = save_artifact(
+        data=embeddings,
+        name="embeddings"
+    )
+    link_artifact_to_model(embed_artifact)
+```
+
+### Link Registered Artifact
+
+```python
+from zenml import register_artifact, link_artifact_to_model, Model
+from zenml import Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+# Register existing data
+data_uri = f"{artifact_store.path}/external/test_set.csv"
+artifact = register_artifact(
+    folder_or_file_uri=data_uri,
+    name="test_dataset"
+)
+
+# Link to model
+model = Model(name="classifier", version="1.5")
+link_artifact_to_model(
+    artifact_version=artifact,
+    model=model
+)
+```
+
+### Link Artifacts from Different Steps
+
+```python
+from zenml import pipeline, step, save_artifact, link_artifact_to_model, Model
+import pandas as pd
+
+model_config = Model(name="recommender", version="1.0")
+
+@step
+def create_features() -> pd.DataFrame:
+    features = pd.DataFrame({"user_id": range(100), "feature": range(100)})
+    return features
+
+@step(model=model_config)
+def save_and_link(features: pd.DataFrame) -> None:
+    # Save the features
+    artifact = save_artifact(
+        data=features,
+        name="user_features"
+    )
+    
+    # Link to model
+    link_artifact_to_model(artifact)
+
+@pipeline(model=model_config)
+def feature_pipeline():
+    features = create_features()
+    save_and_link(features)
+```
+
+### Link to Production Model
+
+```python
+from zenml import save_artifact, link_artifact_to_model, Model
+from zenml.enums import ModelStages
+import pandas as pd
+
+# Create deployment configuration
+config = {
+    "endpoint": "https://api.example.com/predict",
+    "timeout": 30,
+    "batch_size": 32
+}
+
+artifact = save_artifact(
+    data=config,
+    name="deployment_config"
+)
+
+# Link to production model
+production_model = Model(
+    name="fraud_detector",
+    version=ModelStages.PRODUCTION
+)
+
+link_artifact_to_model(
+    artifact_version=artifact,
+    model=production_model
+)
+```
+
+### Link with Error Handling
+
+```python
+from zenml import step, save_artifact, link_artifact_to_model, Model
+import pandas as pd
+
+@step(model=Model(name="my_model", version="1.0"))
+def safe_link() -> None:
+    df = pd.DataFrame({"data": [1, 2, 3]})
+    
+    try:
+        artifact = save_artifact(data=df, name="data")
+        link_artifact_to_model(artifact)
+        print("Successfully linked artifact to model")
+    except RuntimeError as e:
+        print(f"Failed to link artifact: {e}")
+        # Handle the error (e.g., log, alert, retry)
+```
+
+### Link Versioned Artifacts
+
+```python
+from zenml import save_artifact, link_artifact_to_model, Model
+import pandas as pd
+
+# Create model
+model = Model(name="experiment", version="2024-01-15")
+
+# Save and link training data
+train_data = pd.DataFrame({"x": range(800)})
+train_artifact = save_artifact(
+    data=train_data,
+    name="experiment_data",
+    version="train"
+)
+link_artifact_to_model(train_artifact, model)
+
+# Save and link test data
+test_data = pd.DataFrame({"x": range(200)})
+test_artifact = save_artifact(
+    data=test_data,
+    name="experiment_data",
+    version="test"
+)
+link_artifact_to_model(test_artifact, model)
+```
+
+### Link in Pipeline Context
+
+```python
+from zenml import pipeline, step, get_step_context, save_artifact, link_artifact_to_model
+import pandas as pd
+
+@step
+def process_data() -> None:
+    # Get model from step context
+    context = get_step_context()
+    
+    if context.model:
+        # Create artifact
+        df = pd.DataFrame({"processed": range(50)})
+        artifact = save_artifact(data=df, name="processed_data")
+        
+        # Link using model from context
+        link_artifact_to_model(
+            artifact_version=artifact,
+            model=context.model
+        )
+        print(f"Linked to model: {context.model.name}")
+```
+
+## Use Cases
+
+1. **Track training data** used for specific model versions
+2. **Link validation datasets** to models for reproducibility
+3. **Associate configuration files** with model deployments
+4. **Connect preprocessing artifacts** to models
+5. **Manage model dependencies** (vocabularies, encoders, scalers)
+6. **Document evaluation results** for model versions
+7. **Track feature engineering outputs** used in model training
+
+## Important Notes
+
+- The link is permanent and creates a queryable relationship in the Model Control Plane
+- Multiple artifacts can be linked to the same model version
+- The same artifact can be linked to multiple model versions
+- When called inside a step with a model configured, the model parameter can be omitted
+- Raises `RuntimeError` if called outside a step and no model is provided
+
+## Retrieving Linked Artifacts
+
+Once artifacts are linked, you can retrieve them from the model:
+
+```python
+from zenml import Model
+
+model = Model(name="my_model", version="1.0")
+
+# Get linked artifact
+artifact = model.get_artifact("training_data")
+
+# Load the artifact data
+data = model.load_artifact("training_data")
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Model" href="./model" icon="cube">
+    Learn about the Model class
+  </Card>
+  <Card title="save_artifact" href="./save-artifact" icon="floppy-disk">
+    Save artifacts manually
+  </Card>
+  <Card title="register_artifact" href="./register-artifact" icon="file-check">
+    Register existing artifacts
+  </Card>
+  <Card title="log_model_metadata" href="./log-model-metadata" icon="tag">
+    Log model metadata
+  </Card>
+</CardGroup>

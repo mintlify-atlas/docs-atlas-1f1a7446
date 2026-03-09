@@ -1,0 +1,340 @@
+---
+title: "BaseOrchestrator"
+description: "Base class for all ZenML orchestrators that coordinate pipeline execution."
+---
+
+## Overview
+
+The `BaseOrchestrator` is the abstract base class for all orchestrators in ZenML. Orchestrators are responsible for executing pipelines by coordinating the execution of individual steps. They determine where and how pipeline steps run, whether locally, in containers, or on remote infrastructure.
+
+## Class Definition
+
+```python
+from zenml.orchestrators import BaseOrchestrator
+```
+
+### Inheritance
+
+- Inherits from: `StackComponent`, `ABC`
+- Component Type: `StackComponentType.ORCHESTRATOR`
+
+## Key Concepts
+
+### Pipeline Submission
+
+Orchestrators submit pipelines for execution using one of two methods:
+
+- **Static Pipelines**: Use `submit_pipeline()` when the pipeline DAG is known at submission time
+- **Dynamic Pipelines**: Use `submit_dynamic_pipeline()` when the pipeline DAG can change during execution
+
+### Orchestrator Run ID
+
+Every orchestrator must implement `get_orchestrator_run_id()` which returns a unique identifier that:
+- Is the same for all steps within a single pipeline run
+- Is unique across different pipeline runs
+- Can be used to track and correlate step executions
+
+## Configuration
+
+<ParamField path="enable_cache" type="bool" default="True">
+  Whether caching is enabled for steps in pipelines run by this orchestrator.
+</ParamField>
+
+<ParamField path="is_synchronous" type="bool" default="False">
+  Whether the orchestrator runs synchronously (waits for completion) or asynchronously.
+</ParamField>
+
+<ParamField path="is_schedulable" type="bool" default="False">
+  Whether the orchestrator supports scheduling pipelines to run at specific times.
+</ParamField>
+
+<ParamField path="supports_client_side_caching" type="bool" default="True">
+  Whether the orchestrator supports client-side caching of step outputs.
+</ParamField>
+
+<ParamField path="handles_step_retries" type="bool" default="False">
+  Whether the orchestrator natively handles step retries on failure.
+</ParamField>
+
+## Abstract Methods
+
+These methods must be implemented by all orchestrator subclasses.
+
+### get_orchestrator_run_id
+
+```python
+@abstractmethod
+def get_orchestrator_run_id(self) -> str:
+    """Returns the run id of the active orchestrator run.
+    
+    Returns:
+        The orchestrator run id.
+    """
+```
+
+<ResponseField name="return" type="str">
+  A unique identifier for this orchestrator run that remains consistent across all steps.
+</ResponseField>
+
+<Warning>
+  This ID must be:
+  - Unique for each pipeline run
+  - Identical for all steps within the same pipeline run
+  - Available in the execution environment of each step
+</Warning>
+
+## Core Methods
+
+### submit_pipeline
+
+```python
+def submit_pipeline(
+    self,
+    snapshot: PipelineSnapshotResponse,
+    stack: Stack,
+    base_environment: Dict[str, str],
+    step_environments: Dict[str, Dict[str, str]],
+    placeholder_run: Optional[PipelineRunResponse] = None,
+) -> Optional[SubmissionResult]:
+    """Submits a static pipeline to the orchestrator."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotResponse" required>
+  The pipeline snapshot containing the pipeline configuration and steps.
+</ParamField>
+
+<ParamField path="stack" type="Stack" required>
+  The stack on which the pipeline will run.
+</ParamField>
+
+<ParamField path="base_environment" type="Dict[str, str]" required>
+  Environment variables shared by all steps.
+</ParamField>
+
+<ParamField path="step_environments" type="Dict[str, Dict[str, str]]" required>
+  Step-specific environment variables, keyed by step invocation ID.
+</ParamField>
+
+<ParamField path="placeholder_run" type="PipelineRunResponse">
+  Optional placeholder pipeline run created before submission.
+</ParamField>
+
+<ResponseField name="return" type="SubmissionResult | None">
+  Optional result containing metadata and a wait function for synchronous execution.
+</ResponseField>
+
+### submit_dynamic_pipeline
+
+```python
+def submit_dynamic_pipeline(
+    self,
+    snapshot: PipelineSnapshotResponse,
+    stack: Stack,
+    environment: Dict[str, str],
+    placeholder_run: Optional[PipelineRunResponse] = None,
+) -> Optional[SubmissionResult]:
+    """Submits a dynamic pipeline to the orchestrator."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotResponse" required>
+  The pipeline snapshot for the dynamic pipeline.
+</ParamField>
+
+<ParamField path="stack" type="Stack" required>
+  The stack on which the pipeline will run.
+</ParamField>
+
+<ParamField path="environment" type="Dict[str, str]" required>
+  Environment variables to set in the orchestration environment.
+</ParamField>
+
+<ParamField path="placeholder_run" type="PipelineRunResponse">
+  Optional placeholder run for the pipeline.
+</ParamField>
+
+<ResponseField name="return" type="SubmissionResult | None">
+  Optional result containing submission metadata.
+</ResponseField>
+
+### run_step
+
+```python
+def run_step(self, step: Step) -> None:
+    """Runs a single step in the pipeline."""
+```
+
+<ParamField path="step" type="Step" required>
+  The step configuration to execute.
+</ParamField>
+
+## Properties
+
+### supports_dynamic_pipelines
+
+```python
+@property
+def supports_dynamic_pipelines(self) -> bool:
+    """Whether the orchestrator supports dynamic pipelines."""
+```
+
+<ResponseField name="return" type="bool">
+  True if the orchestrator has implemented `submit_dynamic_pipeline()`.
+</ResponseField>
+
+### can_run_isolated_steps
+
+```python
+@property
+def can_run_isolated_steps(self) -> bool:
+    """Whether the orchestrator can run isolated steps."""
+```
+
+<ResponseField name="return" type="bool">
+  True if the orchestrator supports running individual steps in isolation.
+</ResponseField>
+
+### supported_execution_modes
+
+```python
+@property
+def supported_execution_modes(self) -> List[ExecutionMode]:
+    """Returns the supported execution modes for this orchestrator."""
+```
+
+<ResponseField name="return" type="List[ExecutionMode]">
+  List of execution modes supported by this orchestrator (e.g., CONTINUE_ON_FAILURE).
+</ResponseField>
+
+## Lifecycle Hooks
+
+### run_init_hook
+
+```python
+@classmethod
+def run_init_hook(cls, snapshot: PipelineSnapshotResponse) -> None:
+    """Runs initialization hook before pipeline execution."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotResponse" required>
+  The pipeline snapshot for which to run the init hook.
+</ParamField>
+
+### run_cleanup_hook
+
+```python
+@classmethod
+def run_cleanup_hook(cls, snapshot: PipelineSnapshotResponse) -> None:
+    """Runs cleanup hook after pipeline execution."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotResponse" required>
+  The pipeline snapshot for which to run the cleanup hook.
+</ParamField>
+
+## Pipeline Management
+
+### fetch_status
+
+```python
+def fetch_status(
+    self,
+    run: PipelineRunResponse,
+    include_steps: bool = False
+) -> Tuple[Optional[ExecutionStatus], Optional[Dict[str, ExecutionStatus]]]:
+    """Fetches the current status of a pipeline run."""
+```
+
+<ParamField path="run" type="PipelineRunResponse" required>
+  The pipeline run to fetch status for.
+</ParamField>
+
+<ParamField path="include_steps" type="bool" default="False">
+  Whether to also fetch the status of individual steps.
+</ParamField>
+
+<ResponseField name="return" type="Tuple[Optional[ExecutionStatus], Optional[Dict[str, ExecutionStatus]]]">
+  Tuple of (pipeline status, step statuses dict) if available.
+</ResponseField>
+
+### stop_run
+
+```python
+def stop_run(self, run: PipelineRunResponse, graceful: bool = False) -> None:
+    """Stops a running pipeline."""
+```
+
+<ParamField path="run" type="PipelineRunResponse" required>
+  The pipeline run to stop.
+</ParamField>
+
+<ParamField path="graceful" type="bool" default="False">
+  Whether to attempt graceful shutdown before forcing termination.
+</ParamField>
+
+## Usage Example
+
+```python
+from zenml.orchestrators import BaseOrchestrator
+from zenml.orchestrators.base_orchestrator import BaseOrchestratorConfig
+import os
+
+class CustomOrchestratorConfig(BaseOrchestratorConfig):
+    """Configuration for custom orchestrator."""
+    
+    api_endpoint: str
+    
+    @property
+    def is_remote(self) -> bool:
+        return True
+
+class CustomOrchestrator(BaseOrchestrator):
+    """Custom orchestrator implementation."""
+    
+    @property
+    def config(self) -> CustomOrchestratorConfig:
+        return cast(CustomOrchestratorConfig, self._config)
+    
+    def get_orchestrator_run_id(self) -> str:
+        """Get unique run ID from environment."""
+        # Example: read from environment variable set by orchestration platform
+        return os.environ["CUSTOM_RUN_ID"]
+    
+    def submit_pipeline(
+        self,
+        snapshot: PipelineSnapshotResponse,
+        stack: Stack,
+        base_environment: Dict[str, str],
+        step_environments: Dict[str, Dict[str, str]],
+        placeholder_run: Optional[PipelineRunResponse] = None,
+    ) -> Optional[SubmissionResult]:
+        """Submit pipeline to custom orchestration backend."""
+        # Implementation: submit to your orchestration platform
+        # ...
+        
+        return SubmissionResult(
+            metadata={"job_id": "12345"},
+            wait_for_completion=self._wait_for_completion
+        )
+    
+    def _wait_for_completion(self) -> None:
+        """Wait for pipeline to complete."""
+        # Poll orchestration backend until completion
+        pass
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Stack" href="/api/stack" icon="layer-group">
+    Learn about the Stack class that contains orchestrators
+  </Card>
+  <Card title="BaseStep" href="/api/base-step" icon="stairs">
+    Understand the steps that orchestrators execute
+  </Card>
+  <Card title="StackComponent" href="/api/stack-component" icon="puzzle-piece">
+    Base class for all stack components
+  </Card>
+  <Card title="Orchestrator Guide" href="/component-guide/orchestrators" icon="book">
+    Guide to using and configuring orchestrators
+  </Card>
+</CardGroup>

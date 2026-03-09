@@ -1,0 +1,450 @@
+---
+title: Google Cloud Integration
+description: Run ZenML pipelines on Google Cloud Platform with Vertex AI
+---
+
+The GCP integration provides comprehensive support for running ZenML pipelines on Google Cloud Platform, including Vertex AI orchestration, GCS artifact storage, and container image management.
+
+## Installation
+
+```bash
+pip install "zenml[gcp]"
+```
+
+This installs the following key packages:
+- `kfp>=2.6.0` - Kubeflow Pipelines SDK (used by Vertex AI)
+- `google-cloud-aiplatform>=1.34.0` - Vertex AI SDK
+- `google-cloud-storage>=2.9.0` - Google Cloud Storage
+- `google-cloud-secret-manager` - Secret management
+- `gcsfs` - GCS filesystem interface
+- `kubernetes` - Kubernetes Python client
+
+## Available Components
+
+The GCP integration provides these stack components:
+
+<CardGroup cols={2}>
+  <Card title="Vertex AI Orchestrator" icon="diagram-project">
+    Execute pipelines using Google Cloud Vertex AI Pipelines
+  </Card>
+  <Card title="Vertex AI Step Operator" icon="shoe-prints">
+    Run individual steps on Vertex AI custom jobs
+  </Card>
+  <Card title="GCS Artifact Store" icon="database">
+    Store artifacts in Google Cloud Storage buckets
+  </Card>
+  <Card title="Vertex Experiment Tracker" icon="chart-line">
+    Track experiments in Vertex AI Experiments
+  </Card>
+  <Card title="GCP Image Builder" icon="hammer">
+    Build container images using Google Cloud Build
+  </Card>
+</CardGroup>
+
+## Authentication
+
+There are three ways to authenticate with GCP:
+
+### 1. Service Connector (Recommended)
+
+```python
+from zenml.client import Client
+
+Client().create_service_connector(
+    name="gcp-connector",
+    type="gcp",
+    auth_method="service-account",
+    configuration={
+        "service_account_json": '{"type": "service_account", ...}',
+        "project_id": "my-gcp-project",
+    },
+)
+```
+
+### 2. Explicit Service Account
+
+```bash
+zenml orchestrator register vertex-orch \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1 \
+    --service_account_path=/path/to/service-account.json
+```
+
+### 3. Application Default Credentials
+
+If no credentials are provided, ZenML uses Application Default Credentials:
+- Environment variable `GOOGLE_APPLICATION_CREDENTIALS`
+- gcloud CLI credentials (`gcloud auth application-default login`)
+- GCE/GKE metadata server (when running on Google Cloud)
+
+## Vertex AI Orchestrator
+
+The Vertex AI orchestrator runs your complete pipeline as a Vertex AI Pipeline.
+
+### Configuration
+
+```bash
+zenml orchestrator register vertex-orch \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1 \
+    --pipeline_root=gs://my-vertex-bucket/pipelines
+```
+
+**Required Parameters:**
+- `project` - GCP project ID
+- `location` - GCP region (e.g., `us-central1`, `europe-west1`)
+
+**Optional Parameters:**
+- `pipeline_root` - GCS URI for pipeline artifacts (defaults to artifact store path if using GCS)
+- `workload_service_account` - Service account for pipeline execution
+- `network` - VPC network for private connectivity
+- `encryption_spec_key_name` - Cloud KMS key for encryption
+
+### Service Account Permissions
+
+The service account needs these IAM roles:
+
+```bash
+# Grant required roles
+gcloud projects add-iam-policy-binding my-gcp-project \
+    --member=serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com \
+    --role=roles/aiplatform.user
+
+gcloud projects add-iam-policy-binding my-gcp-project \
+    --member=serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com \
+    --role=roles/storage.objectAdmin
+
+gcloud projects add-iam-policy-binding my-gcp-project \
+    --member=serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com \
+    --role=roles/artifactregistry.reader
+```
+
+Required permissions:
+- `aiplatform.customJobs.create`
+- `aiplatform.pipelineJobs.create`
+- `storage.objects.get/create/delete`
+- `artifactregistry.repositories.downloadArtifacts`
+
+### Step-Level Settings
+
+Customize individual steps with Vertex AI-specific settings:
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.gcp.flavors.vertex_orchestrator_flavor import (
+    VertexOrchestratorSettings,
+)
+from zenml.integrations.kubernetes.pod_settings import KubernetesPodSettings
+
+@step(
+    settings={
+        "orchestrator": VertexOrchestratorSettings(
+            pod_settings=KubernetesPodSettings(
+                node_selectors={
+                    "cloud.google.com/gke-accelerator": "NVIDIA_TESLA_T4"
+                },
+                resources={
+                    "requests": {"memory": "16Gi", "cpu": "4"},
+                    "limits": {"memory": "16Gi", "cpu": "4", "nvidia.com/gpu": "1"},
+                },
+            ),
+            labels={"team": "ml-ops", "project": "recommendation"},
+        )
+    }
+)
+def train_on_gpu(data: pd.DataFrame) -> Model:
+    # Training code runs on GPU
+    ...
+
+@step(
+    settings={
+        "orchestrator": VertexOrchestratorSettings(
+            pod_settings=KubernetesPodSettings(
+                resources={
+                    "requests": {"memory": "4Gi", "cpu": "2"},
+                },
+            ),
+        )
+    }
+)
+def preprocess_data() -> pd.DataFrame:
+    ...
+
+@pipeline
+def training_pipeline():
+    data = preprocess_data()
+    train_on_gpu(data)
+```
+
+**Available Settings:**
+- `pod_settings` - Kubernetes Pod configuration (resources, node selectors, tolerations)
+- `labels` - GCP labels for the pipeline job
+- `synchronous` - Wait for pipeline completion (default: True)
+- `node_selector_constraint` - Tuple of (key, value) for node selection (deprecated, use pod_settings)
+
+### Machine Types and GPUs
+
+Vertex AI supports various machine types and accelerators:
+
+| Machine Family | vCPUs | Memory | Use Case |
+|----------------|-------|--------|----------|
+| n1-standard-4 | 4 | 15 GB | Standard workloads |
+| n1-standard-8 | 8 | 30 GB | Medium workloads |
+| n1-highmem-8 | 8 | 52 GB | Memory-intensive |
+| n1-highcpu-16 | 16 | 14.4 GB | CPU-intensive |
+
+**GPU Accelerators:**
+- `NVIDIA_TESLA_K80` - Legacy, cheap
+- `NVIDIA_TESLA_T4` - Good price/performance
+- `NVIDIA_TESLA_V100` - High performance
+- `NVIDIA_TESLA_P4` - Inference optimized
+- `NVIDIA_TESLA_A100` - Latest, most powerful
+
+Check [GPU availability by region](https://cloud.google.com/compute/docs/gpus/gpu-regions-zones).
+
+## Vertex AI Step Operator
+
+The step operator runs individual steps as Vertex AI custom jobs.
+
+### Configuration
+
+```bash
+zenml step-operator register vertex-step-op \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1 \
+    --service_account=vertex-sa@my-gcp-project.iam.gserviceaccount.com
+```
+
+### Usage
+
+```python
+from zenml import step, pipeline
+
+@step(step_operator="vertex-step-op")
+def train_on_vertex(data: pd.DataFrame) -> Model:
+    # This step runs on Vertex AI
+    ...
+
+@step
+def preprocess_locally(raw_data: pd.DataFrame) -> pd.DataFrame:
+    # This step runs locally or on local orchestrator
+    ...
+
+@pipeline
+def hybrid_pipeline():
+    data = preprocess_locally(...)  # Runs locally
+    model = train_on_vertex(data)  # Runs on Vertex AI
+```
+
+## GCS Artifact Store
+
+Store artifacts in Google Cloud Storage buckets.
+
+### Configuration
+
+```bash
+zenml artifact-store register gcs-store \
+    --flavor=gcp \
+    --path=gs://my-zenml-artifacts
+```
+
+The path must be a valid GCS URI starting with `gs://`.
+
+### Bucket Permissions
+
+Ensure the service account has access:
+
+```bash
+# Grant storage permissions
+gsutil iam ch \
+    serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com:roles/storage.objectAdmin \
+    gs://my-zenml-artifacts
+```
+
+## Vertex Experiment Tracker
+
+Track experiments using Vertex AI Experiments.
+
+### Configuration
+
+```bash
+zenml experiment-tracker register vertex-experiments \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1
+```
+
+### Usage
+
+```python
+from zenml import step, pipeline
+from zenml.client import Client
+
+experiment_tracker = Client().active_stack.experiment_tracker
+
+@step(experiment_tracker="vertex-experiments")
+def train_model(data: pd.DataFrame) -> Model:
+    # Log metrics to Vertex AI Experiments
+    experiment_tracker.log_params({"learning_rate": 0.001, "epochs": 10})
+    
+    # Training loop
+    for epoch in range(10):
+        loss = train_epoch(...)
+        experiment_tracker.log_metrics({"loss": loss}, step=epoch)
+    
+    return model
+```
+
+## Complete Stack Example
+
+Here's a complete production-ready GCP stack:
+
+```bash
+# Create service connector
+zenml service-connector register gcp-prod \
+    --type=gcp \
+    --auth_method=service-account \
+    --service_account_json=@/path/to/service-account.json \
+    --project_id=my-gcp-project
+
+# Register components
+zenml orchestrator register vertex-prod \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1 \
+    --pipeline_root=gs://my-vertex-pipelines \
+    --workload_service_account=vertex-sa@my-gcp-project.iam.gserviceaccount.com
+
+zenml artifact-store register gcs-prod \
+    --flavor=gcp \
+    --path=gs://my-zenml-artifacts
+
+zenml container-registry register gcr-prod \
+    --flavor=gcp \
+    --uri=gcr.io/my-gcp-project
+
+zenml experiment-tracker register vertex-exp-prod \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1
+
+# Create stack
+zenml stack register gcp-prod \
+    -o vertex-prod \
+    -a gcs-prod \
+    -c gcr-prod \
+    -e vertex-exp-prod
+
+# Activate stack
+zenml stack set gcp-prod
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Workload Identity on GKE">
+    When running ZenML from GKE, use Workload Identity instead of service account keys:
+    
+    ```bash
+    # Link Kubernetes service account to GCP service account
+    gcloud iam service-accounts add-iam-policy-binding \
+        vertex-sa@my-gcp-project.iam.gserviceaccount.com \
+        --role=roles/iam.workloadIdentityUser \
+        --member="serviceAccount:my-gcp-project.svc.id.goog[default/zenml]"
+    ```
+  </Accordion>
+
+  <Accordion title="Use Private GKE Clusters">
+    For better security, use private GKE clusters with Private Service Connect:
+    
+    ```bash
+    zenml orchestrator register vertex-orch \
+        --flavor=vertex \
+        --project=my-gcp-project \
+        --location=us-central1 \
+        --network=projects/my-gcp-project/global/networks/my-vpc \
+        --private_service_connect=projects/my-gcp-project/regions/us-central1/networkAttachments/my-psc
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Encryption">
+    Use customer-managed encryption keys (CMEK) for data at rest:
+    
+    ```bash
+    zenml orchestrator register vertex-orch \
+        --flavor=vertex \
+        --encryption_spec_key_name=projects/my-gcp-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key
+    ```
+  </Accordion>
+
+  <Accordion title="Label Resources">
+    Use labels for cost tracking and organization:
+    
+    ```python
+    @step(
+        settings={
+            "orchestrator": VertexOrchestratorSettings(
+                labels={
+                    "environment": "production",
+                    "team": "ml-ops",
+                    "cost-center": "engineering",
+                }
+            )
+        }
+    )
+    def train_model():
+        ...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Permission Denied Errors">
+    If you see permission errors, verify:
+    
+    1. Service account has required IAM roles
+    2. API is enabled (`gcloud services enable aiplatform.googleapis.com`)
+    3. GCS bucket policy allows access
+    4. Artifact Registry permissions are correct
+  </Accordion>
+
+  <Accordion title="GPU Not Available">
+    If GPU allocation fails:
+    
+    1. Check GPU availability in your region
+    2. Request quota increase in IAM & Admin > Quotas
+    3. Verify node selector matches available GPU types
+    4. Try a different region
+  </Accordion>
+
+  <Accordion title="Pipeline Upload Fails">
+    If pipeline compilation/upload fails:
+    
+    1. Check `pipeline_root` is a valid GCS path
+    2. Verify service account can write to GCS bucket
+    3. Ensure KFP version compatibility
+    4. Check ZenML and integration versions match
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Vertex AI Documentation" href="./vertex-ai">
+    Detailed Vertex AI orchestrator guide
+  </Card>
+  <Card title="GCS Artifact Store" href="../stack-components/artifact-stores">
+    Configure GCS for artifact storage
+  </Card>
+  <Card title="Service Connectors" href="../stack-components/service-connectors">
+    Advanced authentication options
+  </Card>
+  <Card title="Remote Execution" href="../user-guide/production">
+    Production deployment patterns
+  </Card>
+</CardGroup>

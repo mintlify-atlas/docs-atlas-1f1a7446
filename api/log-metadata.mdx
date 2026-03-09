@@ -1,0 +1,332 @@
+---
+title: "log_metadata"
+description: "Log metadata to steps, runs, artifacts, and models"
+icon: "tag"
+---
+
+The `log_metadata()` function allows you to attach metadata to various ZenML entities including steps, pipeline runs, artifacts, and model versions.
+
+## Signature
+
+```python
+def log_metadata(
+    metadata: Dict[str, MetadataType],
+    # Step and run parameters
+    step_id: Optional[UUID] = None,
+    step_name: Optional[str] = None,
+    run_id_name_or_prefix: Optional[Union[UUID, str]] = None,
+    # Artifact parameters
+    artifact_version_id: Optional[UUID] = None,
+    artifact_name: Optional[str] = None,
+    artifact_version: Optional[str] = None,
+    infer_artifact: bool = False,
+    # Model parameters
+    model_version_id: Optional[UUID] = None,
+    model_name: Optional[str] = None,
+    model_version: Optional[Union[ModelStages, int, str]] = None,
+    infer_model: bool = False,
+) -> None
+```
+
+## Parameters
+
+<ParamField path="metadata" type="Dict[str, MetadataType]" required>
+  Dictionary of metadata key-value pairs to log. Values can be strings, numbers, booleans, lists, or dicts.
+</ParamField>
+
+<ParamField path="step_id" type="UUID" optional>
+  The ID of a specific step to attach metadata to.
+</ParamField>
+
+<ParamField path="step_name" type="str" optional>
+  The name of a step (requires `run_id_name_or_prefix`).
+</ParamField>
+
+<ParamField path="run_id_name_or_prefix" type="Union[UUID, str]" optional>
+  The ID, name, or prefix of a pipeline run.
+</ParamField>
+
+<ParamField path="artifact_version_id" type="UUID" optional>
+  The ID of a specific artifact version.
+</ParamField>
+
+<ParamField path="artifact_name" type="str" optional>
+  The name of an artifact (requires `artifact_version` for external calls).
+</ParamField>
+
+<ParamField path="artifact_version" type="str" optional>
+  The version of the artifact.
+</ParamField>
+
+<ParamField path="infer_artifact" type="bool" default="False">
+  Whether to infer the artifact from the step context (must be called inside a step).
+</ParamField>
+
+<ParamField path="model_version_id" type="UUID" optional>
+  The ID of a specific model version.
+</ParamField>
+
+<ParamField path="model_name" type="str" optional>
+  The name of a model (requires `model_version`).
+</ParamField>
+
+<ParamField path="model_version" type="Union[ModelStages, int, str]" optional>
+  The version or stage of the model.
+</ParamField>
+
+<ParamField path="infer_model" type="bool" default="False">
+  Whether to infer the model from the step context (must be called inside a step with a configured model).
+</ParamField>
+
+## Examples
+
+### Log Metadata to Current Step
+
+```python
+from zenml import step, log_metadata
+
+@step
+def training_step() -> None:
+    # Train model
+    accuracy = 0.95
+    loss = 0.05
+    
+    # Log to the current step
+    log_metadata({
+        "accuracy": accuracy,
+        "loss": loss,
+        "framework": "tensorflow",
+        "epochs": 100
+    })
+```
+
+### Log Metadata to Artifact Output
+
+```python
+from zenml import step, log_metadata
+import pandas as pd
+
+@step
+def create_dataset() -> pd.DataFrame:
+    df = pd.DataFrame({"value": range(1000)})
+    
+    # Log metadata to the output artifact
+    log_metadata(
+        metadata={
+            "num_rows": len(df),
+            "num_columns": len(df.columns),
+            "memory_usage": df.memory_usage(deep=True).sum()
+        },
+        infer_artifact=True
+    )
+    
+    return df
+```
+
+### Log Metadata to Specific Artifact
+
+```python
+from zenml import step, log_metadata
+from typing import Tuple, Annotated
+import pandas as pd
+
+@step
+def split_data() -> Tuple[
+    Annotated[pd.DataFrame, "train"],
+    Annotated[pd.DataFrame, "test"],
+]:
+    train = pd.DataFrame({"x": range(800)})
+    test = pd.DataFrame({"x": range(200)})
+    
+    # Log metadata to specific outputs
+    log_metadata(
+        metadata={"split": "train", "size": len(train)},
+        artifact_name="train",
+        infer_artifact=True
+    )
+    
+    log_metadata(
+        metadata={"split": "test", "size": len(test)},
+        artifact_name="test",
+        infer_artifact=True
+    )
+    
+    return train, test
+```
+
+### Log Metadata to Model
+
+```python
+from zenml import step, log_metadata, Model
+
+@step(model=Model(name="iris_classifier", version="1.0"))
+def evaluate_model() -> float:
+    accuracy = 0.96
+    
+    # Log metadata to the model version
+    log_metadata(
+        metadata={
+            "test_accuracy": accuracy,
+            "test_samples": 150,
+            "confusion_matrix": [[50, 0, 0], [0, 48, 2], [0, 1, 49]]
+        },
+        infer_model=True
+    )
+    
+    return accuracy
+```
+
+### Log Metadata to Existing Artifact
+
+```python
+from zenml import log_metadata
+
+# Log metadata to a previously created artifact
+log_metadata(
+    metadata={
+        "reviewed": True,
+        "reviewer": "data_scientist_1",
+        "quality_score": 9.5
+    },
+    artifact_name="training_data",
+    artifact_version="5"
+)
+```
+
+### Log Metadata to Pipeline Run
+
+```python
+from zenml import step, log_metadata
+
+@step
+def monitor_step() -> None:
+    # Log metadata to the entire pipeline run
+    log_metadata(
+        metadata={
+            "environment": "production",
+            "triggered_by": "scheduler",
+            "priority": "high"
+        },
+        run_id_name_or_prefix="my_pipeline-2024_01_15-12_30_45"
+    )
+```
+
+### Log Metadata to Specific Step in Run
+
+```python
+from zenml import log_metadata
+
+# Log metadata to a specific step in a specific run
+log_metadata(
+    metadata={
+        "retry_count": 3,
+        "error_resolved": True
+    },
+    step_name="data_loader",
+    run_id_name_or_prefix="my_pipeline-2024_01_15"
+)
+```
+
+### Complex Metadata Types
+
+```python
+from zenml import step, log_metadata
+
+@step
+def analysis_step() -> None:
+    log_metadata({
+        # Simple types
+        "accuracy": 0.95,
+        "model_type": "RandomForest",
+        "is_production": True,
+        
+        # Lists
+        "feature_names": ["age", "income", "education"],
+        "class_labels": [0, 1, 2],
+        
+        # Nested structures
+        "hyperparameters": {
+            "n_estimators": 100,
+            "max_depth": 10,
+            "min_samples_split": 2
+        },
+        
+        # Arrays/matrices (as lists)
+        "confusion_matrix": [
+            [45, 2, 1],
+            [3, 48, 2],
+            [1, 1, 47]
+        ]
+    })
+```
+
+### Log Metadata to Model by Name and Version
+
+```python
+from zenml import log_metadata
+from zenml.enums import ModelStages
+
+# Log to production model
+log_metadata(
+    metadata={
+        "deployed_at": "2024-01-15T10:30:00Z",
+        "deployment_target": "kubernetes-cluster-1",
+        "replicas": 3
+    },
+    model_name="sentiment_analyzer",
+    model_version=ModelStages.PRODUCTION
+)
+```
+
+### Batch Metadata Logging
+
+```python
+from zenml import step, log_metadata
+
+@step
+def comprehensive_step() -> dict:
+    results = {"score": 0.92}
+    
+    # Log multiple metadata entries
+    log_metadata({"preprocessing": "completed"})
+    log_metadata({"training": "completed"})
+    log_metadata({"validation": "completed"})
+    log_metadata({"final_score": results["score"]})
+    
+    return results
+```
+
+## Metadata Types
+
+The following Python types are supported as metadata values:
+
+- **Primitives**: `str`, `int`, `float`, `bool`
+- **Collections**: `list`, `dict`
+- **None**: `None` values are supported
+- **Nested**: Dictionaries and lists can be nested
+
+## Use Cases
+
+1. **Track experiment parameters** - Log hyperparameters, configurations, and settings
+2. **Record performance metrics** - Store accuracy, loss, and other evaluation metrics
+3. **Document data statistics** - Save dataset sizes, distributions, and characteristics
+4. **Audit and compliance** - Track who processed data, when, and under what conditions
+5. **Quality assurance** - Mark artifacts as reviewed, validated, or approved
+6. **Deployment tracking** - Record deployment information and environment details
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="log_artifact_metadata" href="./log-artifact-metadata" icon="tag">
+    Deprecated artifact metadata function
+  </Card>
+  <Card title="log_model_metadata" href="./log-model-metadata" icon="tag">
+    Deprecated model metadata function
+  </Card>
+  <Card title="get_step_context" href="./get-step-context" icon="brackets-curly">
+    Access step context
+  </Card>
+  <Card title="bulk_log_metadata" href="#bulk_log_metadata">
+    Log metadata to multiple entities
+  </Card>
+</CardGroup>

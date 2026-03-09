@@ -1,0 +1,284 @@
+---
+title: "load_artifact"
+description: "Load artifacts from the artifact store"
+icon: "download"
+---
+
+The `load_artifact()` function allows you to load artifacts that were previously saved to the artifact store.
+
+## Signature
+
+```python
+def load_artifact(
+    name_or_id: Union[str, UUID],
+    version: Optional[str] = None,
+) -> Any
+```
+
+## Parameters
+
+<ParamField path="name_or_id" type="Union[str, UUID]" required>
+  The name or ID of the artifact to load. If a name is provided, you can optionally specify a version.
+</ParamField>
+
+<ParamField path="version" type="str" optional>
+  The version of the artifact to load. If `name_or_id` is a name and version is not provided, the latest version will be loaded. Ignored if `name_or_id` is a UUID.
+</ParamField>
+
+## Returns
+
+<ResponseField name="data" type="Any">
+  The loaded artifact data.
+</ResponseField>
+
+## Examples
+
+### Load Latest Version by Name
+
+```python
+from zenml import load_artifact
+import pandas as pd
+
+# Load the latest version of an artifact
+df: pd.DataFrame = load_artifact("my_dataframe")
+print(df.head())
+```
+
+### Load Specific Version
+
+```python
+from zenml import load_artifact
+import pandas as pd
+
+# Load a specific version
+df: pd.DataFrame = load_artifact("training_data", version="v1.0.0")
+print(f"Loaded {len(df)} rows")
+```
+
+### Load by UUID
+
+```python
+from zenml import load_artifact
+from uuid import UUID
+
+artifact_id = UUID("123e4567-e89b-12d3-a456-426614174000")
+data = load_artifact(artifact_id)
+```
+
+### Load and Use in a Step
+
+```python
+from zenml import step, load_artifact
+import pandas as pd
+import numpy as np
+
+@step
+def use_saved_data() -> np.ndarray:
+    # Load previously saved artifact
+    df: pd.DataFrame = load_artifact("preprocessed_data")
+    
+    # Use the loaded data
+    array = df.values
+    return array
+```
+
+### Load Multiple Artifacts
+
+```python
+from zenml import load_artifact
+import pandas as pd
+import numpy as np
+
+# Load training data
+train_df = load_artifact("experiment_data", version="train")
+
+# Load test data
+test_df = load_artifact("experiment_data", version="test")
+
+# Load model weights
+weights = load_artifact("model_weights")
+
+print(f"Train size: {len(train_df)}")
+print(f"Test size: {len(test_df)}")
+print(f"Weight shape: {weights.shape}")
+```
+
+### Load Model Artifact
+
+```python
+from zenml import load_artifact
+
+# Load a trained model
+model = load_artifact("random_forest_model", version="2")
+
+# Use the model for predictions
+predictions = model.predict(X_test)
+```
+
+### Load with Error Handling
+
+```python
+from zenml import load_artifact
+
+try:
+    data = load_artifact("my_artifact", version="3")
+    print("Artifact loaded successfully")
+except KeyError:
+    print("Artifact not found, using default data")
+    data = default_data()
+```
+
+### Load Artifacts from Different Runs
+
+```python
+from zenml import step, load_artifact
+
+@step
+def compare_results() -> dict:
+    # Load results from different experiments
+    exp1_results = load_artifact("results", version="experiment_1")
+    exp2_results = load_artifact("results", version="experiment_2")
+    exp3_results = load_artifact("results", version="experiment_3")
+    
+    # Compare them
+    comparison = {
+        "exp1_accuracy": exp1_results["accuracy"],
+        "exp2_accuracy": exp2_results["accuracy"],
+        "exp3_accuracy": exp3_results["accuracy"],
+    }
+    
+    return comparison
+```
+
+### Load Artifact in Notebook
+
+```python
+# In a Jupyter notebook
+from zenml import load_artifact
+import matplotlib.pyplot as plt
+
+# Load artifact for analysis
+df = load_artifact("sales_data", version="2024-01")
+
+# Analyze and visualize
+df.describe()
+df.plot(kind="bar")
+plt.show()
+```
+
+### Chain Loading
+
+```python
+from zenml import load_artifact
+import pandas as pd
+
+# Load raw data
+raw_data = load_artifact("raw_sales")
+
+# Load preprocessing parameters that were saved
+preproc_params = load_artifact("preprocessing_config")
+
+# Apply preprocessing
+processed_data = apply_preprocessing(raw_data, preproc_params)
+```
+
+### Load from Model
+
+```python
+from zenml import Model
+
+# Load artifact linked to a model version
+model = Model(name="iris_classifier", version="production")
+training_data = model.load_artifact("training_data")
+model_weights = model.load_artifact("model")
+```
+
+### Version Iteration
+
+```python
+from zenml import Client
+from zenml import load_artifact
+
+client = Client()
+
+# List all versions of an artifact
+artifact_versions = client.list_artifact_versions(
+    name="experiment_results"
+)
+
+# Load each version
+for artifact_version in artifact_versions:
+    data = load_artifact(artifact_version.id)
+    print(f"Version {artifact_version.version}: {data['accuracy']}")
+```
+
+### Conditional Loading
+
+```python
+from zenml import step, load_artifact
+from zenml import Client
+
+@step
+def smart_load() -> dict:
+    client = Client()
+    
+    # Check if artifact exists
+    try:
+        artifacts = client.list_artifact_versions(
+            name="cached_features",
+            size=1
+        )
+        
+        if artifacts:
+            # Load cached features
+            features = load_artifact("cached_features")
+            print("Using cached features")
+        else:
+            # Compute features
+            features = compute_features()
+            print("Computed new features")
+    except:
+        features = compute_features()
+    
+    return features
+```
+
+## Important Notes
+
+- When loading by name, if no version is specified, the **latest version** is returned
+- The artifact is deserialized using the same materializer that was used to save it
+- If the materializer or data type is not available in the current environment, loading will fail
+- Artifacts are cached during loading for performance
+- Large artifacts may take time to download from remote artifact stores
+
+## Error Handling
+
+Common errors you might encounter:
+
+- **KeyError**: Artifact with the specified name/version doesn't exist
+- **ModuleNotFoundError**: The materializer or data type class cannot be imported
+- **ImportError**: Dependencies required by the materializer are not installed
+
+## Performance Tips
+
+1. **Cache loaded artifacts** in your code to avoid repeated downloads
+2. **Use specific versions** when possible for better performance
+3. **Load by ID** when you know it for the fastest lookups
+4. For **large artifacts**, consider loading in a step with appropriate resources
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="save_artifact" href="./save-artifact" icon="floppy-disk">
+    Save artifacts manually
+  </Card>
+  <Card title="Model.load_artifact" href="./model#load_artifact" icon="cube">
+    Load artifacts from models
+  </Card>
+  <Card title="ExternalArtifact" href="./external-artifact" icon="file-import">
+    Use artifacts as step inputs
+  </Card>
+  <Card title="register_artifact" href="./register-artifact" icon="file-check">
+    Register existing data
+  </Card>
+</CardGroup>

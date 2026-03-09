@@ -1,0 +1,241 @@
+---
+title: AI Agent Orchestration with ZenML
+description: Build, deploy, and monitor production-ready AI agents with ZenML's orchestration framework
+---
+
+ZenML brings production-grade orchestration to AI agents, enabling you to build reproducible, monitored, and scalable agent workflows. Whether you're working with LangGraph, CrewAI, LangChain, or any other agent framework, ZenML provides the infrastructure to take your agents from prototype to production.
+
+## Why orchestrate agents with ZenML?
+
+AI agents introduce unique challenges that traditional MLOps tooling wasn't designed to handle:
+
+**Reproducibility**: Agent behaviors can vary dramatically between runs due to LLM non-determinism, tool usage, and dynamic decision-making. ZenML captures the complete execution context including prompts, tool calls, and responses.
+
+**Observability**: Understanding what agents did and why requires tracking more than just inputs and outputs. ZenML logs intermediate steps, decision points, and artifact versioning.
+
+**Deployment**: Agents need to run as both batch processes (analyzing datasets) and real-time services (responding to user queries). ZenML supports both patterns with the same pipeline code.
+
+**Evaluation**: Comparing agent architectures requires systematic testing across diverse scenarios. ZenML pipelines enable reproducible agent comparisons with versioned datasets and metrics.
+
+## Quick start
+
+Here's a minimal example deploying a LangGraph agent with ZenML:
+
+```python
+from zenml import pipeline, step
+from langchain.agents import create_agent
+from typing import Annotated
+
+@step
+def run_agent(query: str) -> Annotated[str, "agent_response"]:
+    """Execute agent and return response."""
+    agent = create_agent(
+        model="openai:gpt-4",
+        tools=[get_weather],
+        system_prompt="You are a helpful assistant"
+    )
+    result = agent.invoke({"messages": [{"role": "user", "content": query}]})
+    return result["messages"][-1].content
+
+@pipeline
+def agent_pipeline(query: str = "What's the weather in SF?") -> str:
+    """Simple agent orchestration pipeline."""
+    response = run_agent(query)
+    return response
+
+if __name__ == "__main__":
+    # Run locally
+    agent_pipeline()
+```
+
+Deploy this agent as an HTTP service:
+
+```bash
+zenml pipeline deploy agent_pipeline --name weather-agent
+zenml deployment invoke weather-agent --query="What's the weather in Berlin?"
+```
+
+## Agent orchestration patterns
+
+ZenML supports multiple agent orchestration patterns:
+
+### Batch processing
+
+Process collections of queries for evaluation, data labeling, or batch inference:
+
+```python
+@step
+def batch_agent_processing(queries: List[str]) -> Annotated[List[str], "responses"]:
+    """Process multiple queries through the agent."""
+    agent = initialize_agent()
+    responses = []
+    for query in queries:
+        result = agent.process(query)
+        responses.append(result)
+    return responses
+
+@pipeline
+def batch_pipeline():
+    queries = load_test_queries()
+    responses = batch_agent_processing(queries)
+    metrics = evaluate_responses(queries, responses)
+    return metrics
+```
+
+### Real-time serving
+
+Deploy agents as HTTP endpoints for production applications:
+
+```python
+from zenml.config import DeploymentSettings
+
+deployment_settings = DeploymentSettings(
+    app_title="Customer Support Agent",
+    cors=CORSConfig(allow_origins=["*"])
+)
+
+@pipeline(settings={"deployment": deployment_settings})
+def agent_api(query: str) -> str:
+    response = run_agent(query)
+    return format_response(response)
+```
+
+### Multi-agent systems
+
+Orchestrate multiple specialized agents working together:
+
+```python
+@step
+def route_query(query: str) -> Annotated[str, "specialist"]:
+    """Route to appropriate specialist agent."""
+    if "return" in query.lower():
+        return "returns_specialist"
+    elif "billing" in query.lower():
+        return "billing_specialist"
+    return "general_support"
+
+@step
+def run_specialist_agent(
+    query: str, specialist: str
+) -> Annotated[str, "response"]:
+    """Execute the appropriate specialist agent."""
+    agent = get_specialist_agent(specialist)
+    return agent.process(query)
+
+@pipeline
+def multi_agent_pipeline(query: str) -> str:
+    specialist = route_query(query)
+    response = run_specialist_agent(query, specialist)
+    return response
+```
+
+### Agent evaluation
+
+Systematically compare different agent configurations:
+
+```python
+@step
+def compare_agents(
+    test_queries: List[str]
+) -> Annotated[Dict[str, Any], "comparison_results"]:
+    """Compare multiple agent architectures."""
+    results = {}
+    
+    # Test SingleAgentRAG
+    single_agent = SingleAgentRAG()
+    results["single_agent"] = evaluate_agent(single_agent, test_queries)
+    
+    # Test MultiSpecialistAgents
+    multi_agent = MultiSpecialistAgents()
+    results["multi_agent"] = evaluate_agent(multi_agent, test_queries)
+    
+    # Test LangGraph workflow
+    langgraph_agent = LangGraphAgent()
+    results["langgraph"] = evaluate_agent(langgraph_agent, test_queries)
+    
+    return results
+
+@pipeline
+def evaluation_pipeline():
+    test_data = load_test_dataset()
+    results = compare_agents(test_data)
+    report = generate_comparison_report(results)
+    return report
+```
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Framework agnostic" icon="puzzle-piece">
+    Works with LangGraph, CrewAI, LangChain, LlamaIndex, PydanticAI, and any Python-based agent framework
+  </Card>
+  <Card title="Production deployment" icon="rocket">
+    Deploy agents as HTTP APIs with a single command. Support for Docker, Kubernetes, and cloud platforms
+  </Card>
+  <Card title="Artifact management" icon="box">
+    Version and track all agent inputs, outputs, prompts, and intermediate results with automatic storage
+  </Card>
+  <Card title="Evaluation pipelines" icon="chart-line">
+    Build reproducible evaluation workflows to compare agent architectures and configurations
+  </Card>
+  <Card title="Observability" icon="eye">
+    Track agent executions, tool usage, token consumption, and costs with integration support for Langfuse
+  </Card>
+  <Card title="Hybrid architectures" icon="diagram-project">
+    Combine LLM agents with traditional ML models for cost-effective, specialized workflows
+  </Card>
+</CardGroup>
+
+## Framework support
+
+ZenML integrates seamlessly with popular agent frameworks:
+
+- **LangGraph**: Graph-based agent workflows with state management
+- **LangChain**: Composable chains and ReAct agents
+- **CrewAI**: Multi-agent crews with role-based collaboration
+- **LlamaIndex**: Function-based agents with async support
+- **PydanticAI**: Type-safe agents with structured outputs
+- **Haystack**: RAG pipelines with retrieval components
+- **OpenAI Agents SDK**: Official OpenAI agent implementation
+- **Semantic Kernel**: Microsoft's plugin-based architecture
+- **Autogen**: Conversational multi-agent systems
+- **AWS Strands**: Simple agent execution on AWS Bedrock
+- **Qwen-Agent**: Function calling with Qwen models
+- **Google ADK**: Gemini-powered agents
+
+See the [Agent Frameworks](/agents/agent-frameworks) page for integration patterns.
+
+## Real-world example: Customer support agent
+
+The [agent comparison example](https://github.com/zenml-io/zenml/tree/main/examples/agent_comparison) demonstrates a complete production workflow:
+
+1. **Load test data**: Real customer service queries
+2. **Train intent classifier**: Traditional ML model for routing
+3. **Define agent architectures**: Single RAG, multi-specialist, and LangGraph
+4. **Run evaluation**: Compare all architectures on the same dataset
+5. **Generate report**: HTML visualization with metrics and workflow diagrams
+
+The evaluation pipeline produces:
+- Performance metrics (latency, confidence, accuracy)
+- Token usage and cost analysis
+- Interactive Mermaid diagrams of each architecture
+- Comprehensive HTML comparison report
+
+This systematic approach reveals that hybrid architectures (LLM + classifier) often outperform pure LLM solutions for specialized tasks while reducing costs.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Orchestrating agents" href="/agents/orchestrating-agents" icon="diagram-project">
+    Learn the patterns and best practices for orchestrating AI agents in production
+  </Card>
+  <Card title="Agent frameworks" href="/agents/agent-frameworks" icon="puzzle-piece">
+    Integration guides for LangGraph, CrewAI, LangChain, and 9 other frameworks
+  </Card>
+  <Card title="Agent evaluation" href="/agents/agent-evaluation" icon="chart-line">
+    Build reproducible evaluation pipelines to compare agent architectures
+  </Card>
+  <Card title="Examples" href="/agents/examples/agent-comparison" icon="code">
+    Complete working examples with deployment configurations
+  </Card>
+</CardGroup>

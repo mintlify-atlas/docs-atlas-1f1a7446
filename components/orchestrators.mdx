@@ -1,0 +1,265 @@
+---
+title: Orchestrators
+description: Execute and manage ML pipelines across different environments
+---
+
+# Orchestrators
+
+An orchestrator is a special kind of backend that manages the running of each step of the pipeline. Orchestrators administer the actual pipeline runs. You can think of it as the 'root' of any pipeline job that you run during your experimentation.
+
+## Overview
+
+The orchestrator is responsible for:
+- Executing pipeline steps in the correct order based on dependencies
+- Managing the execution environment for each step
+- Handling failures and retries
+- Scheduling pipeline runs (if supported)
+- Coordinating distributed execution across multiple workers
+
+## Available Orchestrators
+
+### Local Orchestrator
+
+The local orchestrator runs pipelines sequentially on your local machine. It's included out of the box and perfect for development and testing.
+
+**Configuration:**
+```bash
+zenml orchestrator register local_orchestrator --flavor=local
+```
+
+**Use cases:**
+- Local development and debugging
+- Quick prototyping
+- Small-scale experiments
+- CI/CD testing
+
+### Local Docker Orchestrator
+
+Runs each pipeline step in a separate Docker container on your local machine. This provides better isolation and reproducibility than the local orchestrator.
+
+**Configuration:**
+```bash
+zenml orchestrator register local_docker --flavor=local_docker
+```
+
+**Requirements:**
+- Docker installed and running locally
+- Container registry component in your stack
+
+**Use cases:**
+- Testing containerized pipelines locally
+- Ensuring reproducibility across environments
+- Debugging container-based workflows
+
+### Kubernetes Orchestrator
+
+Executes pipeline steps as Kubernetes pods in a Kubernetes cluster.
+
+**Installation:**
+```bash
+zenml integration install kubernetes
+```
+
+**Configuration:**
+```bash
+zenml orchestrator register k8s_orchestrator --flavor=kubernetes \
+  --kubernetes_context=my-context \
+  --kubernetes_namespace=zenml
+```
+
+**Requirements:**
+- Kubernetes cluster access
+- Container registry component
+- Configured kubectl context
+
+**Use cases:**
+- Production workloads
+- Scalable pipeline execution
+- Multi-tenant environments
+- Cloud-native deployments
+
+### Kubeflow Orchestrator
+
+Uses Kubeflow Pipelines to orchestrate workflows on Kubernetes.
+
+**Installation:**
+```bash
+zenml integration install kubeflow
+```
+
+**Configuration:**
+```bash
+zenml orchestrator register kubeflow_orchestrator --flavor=kubeflow \
+  --kubernetes_context=my-context
+```
+
+**Features:**
+- Native Kubeflow Pipelines UI
+- Advanced scheduling capabilities
+- Experiment tracking integration
+- Kubernetes-native execution
+
+### Airflow Orchestrator
+
+Integrates with Apache Airflow to leverage its powerful scheduling and monitoring capabilities.
+
+**Installation:**
+```bash
+zenml integration install airflow
+```
+
+**Configuration:**
+```bash
+zenml orchestrator register airflow_orchestrator --flavor=airflow
+```
+
+**Features:**
+- Complex scheduling with cron expressions
+- Rich monitoring and alerting
+- Extensive plugin ecosystem
+- Battle-tested at scale
+
+**Use cases:**
+- Scheduled pipeline runs
+- Complex workflow dependencies
+- Organizations already using Airflow
+- Production ML platforms
+
+### Cloud Orchestrators
+
+<CardGroup cols={2}>
+  <Card title="Vertex AI Orchestrator" icon="google">
+    Google Cloud's managed ML orchestration service
+    
+    ```bash
+    zenml integration install gcp
+    zenml orchestrator register vertex --flavor=vertex \
+      --project=my-project \
+      --location=us-central1
+    ```
+  </Card>
+  
+  <Card title="SageMaker Orchestrator" icon="aws">
+    AWS SageMaker Pipelines for orchestration
+    
+    ```bash
+    zenml integration install aws
+    zenml orchestrator register sagemaker --flavor=sagemaker \
+      --execution_role=arn:aws:iam::...
+    ```
+  </Card>
+  
+  <Card title="Azure ML Orchestrator" icon="microsoft">
+    Azure Machine Learning pipelines
+    
+    ```bash
+    zenml integration install azure
+    zenml orchestrator register azureml --flavor=azureml \
+      --subscription_id=... \
+      --resource_group=...
+    ```
+  </Card>
+  
+  <Card title="Databricks Orchestrator" icon="database">
+    Databricks workflows for orchestration
+    
+    ```bash
+    zenml integration install databricks
+    zenml orchestrator register databricks --flavor=databricks
+    ```
+  </Card>
+</CardGroup>
+
+## Choosing an Orchestrator
+
+Consider these factors when selecting an orchestrator:
+
+| Factor | Local | Kubernetes | Cloud Services |
+|--------|-------|------------|----------------|
+| **Setup Complexity** | None | Medium | Low-Medium |
+| **Scalability** | Limited | High | High |
+| **Cost** | Free | Infrastructure | Pay-per-use |
+| **Scheduling** | No | Yes | Yes |
+| **Monitoring** | Basic | Good | Excellent |
+| **Best For** | Development | Production (self-hosted) | Production (managed) |
+
+## Switching Orchestrators
+
+You can easily switch orchestrators by creating a new stack:
+
+```bash
+# Create a new stack with a different orchestrator
+zenml stack copy default production
+zenml orchestrator register prod_orchestrator --flavor=kubernetes
+zenml stack update production -o prod_orchestrator
+
+# Switch to the new stack
+zenml stack set production
+```
+
+## Static vs Dynamic Pipelines
+
+Orchestrators handle two types of pipelines:
+
+**Static Pipelines**: The execution graph is known before the pipeline starts. All steps and their dependencies are defined upfront.
+
+**Dynamic Pipelines**: The execution graph can change during runtime based on step outputs. These require orchestrators that support dynamic DAG generation.
+
+Most orchestrators support static pipelines. Dynamic pipeline support varies by orchestrator.
+
+## Resource Configuration
+
+You can configure compute resources for pipeline steps:
+
+```python
+from zenml import step, pipeline
+from zenml.config import ResourceSettings
+
+@step(settings={"resources": ResourceSettings(cpu_count=4, memory="8GB")})
+def training_step() -> None:
+    # This step gets 4 CPUs and 8GB memory
+    ...
+```
+
+Orchestrators translate these resource settings into their native format (e.g., Kubernetes resource requests/limits).
+
+## Scheduling Pipelines
+
+Orchestrators that support scheduling allow you to run pipelines on a schedule:
+
+```python
+from zenml import pipeline
+from zenml.config import Schedule
+
+@pipeline(schedule=Schedule(cron_expression="0 2 * * *"))
+def daily_training_pipeline():
+    # Runs every day at 2 AM
+    ...
+```
+
+## Custom Orchestrators
+
+You can build custom orchestrators by extending the `BaseOrchestrator` class:
+
+```python
+from zenml.orchestrators import BaseOrchestrator
+
+class MyOrchestrator(BaseOrchestrator):
+    def prepare_or_run_pipeline(self, deployment, stack):
+        # Implement your orchestration logic
+        ...
+```
+
+See the [Custom Components guide](/advanced/custom-components) for details.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Artifact Stores" icon="database" href="/components/artifact-stores">
+    Configure storage for pipeline artifacts
+  </Card>
+  
+  <Card title="Container Registries" icon="box" href="/components/container-registries">
+    Set up container image storage
+  </Card>
+</CardGroup>

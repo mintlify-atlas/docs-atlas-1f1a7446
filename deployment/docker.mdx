@@ -1,0 +1,750 @@
+---
+title: Docker Deployment
+description: Deploy ZenML server using Docker for containerized environments
+---
+
+# Docker-Based Deployment
+
+Docker provides a consistent, portable way to deploy ZenML server across different environments. This guide covers Docker deployment from development to production scenarios.
+
+## Docker Images
+
+ZenML provides official Docker images:
+
+<CardGroup cols={2}>
+  <Card title="Production Image" icon="docker">
+    `zenmldocker/zenml-server:latest`
+    
+    Optimized production image with minimal footprint
+  </Card>
+  
+  <Card title="Development Image" icon="docker">
+    `zenmldocker/zenml-server:dev`
+    
+    Development image with debugging tools
+  </Card>
+</CardGroup>
+
+### Available Tags
+
+```bash
+# Latest stable release
+zenmldocker/zenml-server:latest
+
+# Specific version
+zenmldocker/zenml-server:0.94.0
+
+# Development/nightly builds
+zenmldocker/zenml-server:dev
+```
+
+## Quick Start
+
+### Single Container Deployment
+
+Run ZenML server with SQLite (development only):
+
+```bash
+docker run -d \
+  --name zenml-server \
+  -p 8080:8080 \
+  -v zenml-data:/zenml/.zenconfig \
+  zenmldocker/zenml-server:latest
+```
+
+Access the server at `http://localhost:8080`
+
+### Docker Compose (Recommended)
+
+Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  zenml:
+    image: zenmldocker/zenml-server:latest
+    container_name: zenml-server
+    ports:
+      - "8080:8080"
+    environment:
+      - ZENML_SERVER_AUTH_SCHEME=NO_AUTH
+      - ZENML_DEFAULT_PROJECT_NAME=default
+      - ZENML_ANALYTICS_OPT_IN=false
+    volumes:
+      - zenml-config:/zenml/.zenconfig
+      - zenml-data:/zenml/.zenconfig/local_stores
+    restart: unless-stopped
+
+volumes:
+  zenml-config:
+  zenml-data:
+```
+
+Deploy:
+
+```bash
+docker-compose up -d
+```
+
+## Production Deployment
+
+### Docker Compose with MySQL
+
+Production-ready setup with external database:
+
+```yaml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: zenml-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: zenml
+      MYSQL_USER: zenml
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    networks:
+      - zenml-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zenml:
+    image: zenmldocker/zenml-server:latest
+    container_name: zenml-server
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Database
+      - ZENML_STORE_URL=mysql://zenml:${MYSQL_PASSWORD}@mysql:3306/zenml
+      - ZENML_STORE_POOL_SIZE=20
+      - ZENML_STORE_MAX_OVERFLOW=20
+      
+      # Authentication
+      - ZENML_SERVER_AUTH_SCHEME=OAUTH2_PASSWORD_BEARER
+      - ZENML_AUTH_JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ZENML_AUTH_JWT_TOKEN_EXPIRE_MINUTES=60
+      
+      # Server
+      - ZENML_SERVER_URL=https://zenml.example.com
+      - ZENML_SERVER_DEPLOYMENT_TYPE=docker
+      - ZENML_DEFAULT_PROJECT_NAME=default
+      
+      # Performance
+      - ZENML_SERVER_THREAD_POOL_SIZE=40
+      - ZENML_SERVER_AUTH_THREAD_POOL_SIZE=5
+      - ZENML_SERVER_REQUEST_TIMEOUT=20
+      
+      # Observability
+      - ZENML_ANALYTICS_OPT_IN=true
+      - ZENML_LOGGING_VERBOSITY=INFO
+      - ZENML_DEBUG=false
+    networks:
+      - zenml-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  mysql-data:
+
+networks:
+  zenml-network:
+    driver: bridge
+```
+
+### Environment Variables File
+
+Create `.env` file:
+
+```bash
+# Generate JWT secret: openssl rand -hex 32
+JWT_SECRET_KEY=your-secret-key-here
+
+# MySQL passwords
+MYSQL_ROOT_PASSWORD=secure-root-password
+MYSQL_PASSWORD=secure-zenml-password
+```
+
+Deploy:
+
+```bash
+# Generate JWT secret
+export JWT_SECRET_KEY=$(openssl rand -hex 32)
+
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f zenml
+```
+
+## Configuration Options
+
+### Core Environment Variables
+
+```bash
+# Server Configuration
+ZENML_SERVER=true
+ZENML_SERVER_DEPLOYMENT_TYPE=docker
+ZENML_SERVER_URL=http://localhost:8080
+ZENML_DEFAULT_PROJECT_NAME=default
+
+# Authentication
+ZENML_SERVER_AUTH_SCHEME=OAUTH2_PASSWORD_BEARER  # or NO_AUTH, HTTP_BASIC
+ZENML_AUTH_JWT_SECRET_KEY=<secret-key>
+ZENML_AUTH_JWT_TOKEN_EXPIRE_MINUTES=60
+
+# Database
+ZENML_STORE_URL=mysql://user:password@host:3306/zenml
+ZENML_STORE_POOL_SIZE=20
+ZENML_STORE_MAX_OVERFLOW=20
+
+# Performance
+ZENML_SERVER_THREAD_POOL_SIZE=40
+ZENML_SERVER_AUTH_THREAD_POOL_SIZE=5
+ZENML_SERVER_REQUEST_TIMEOUT=20
+ZENML_SERVER_REQUEST_CACHE_TIMEOUT=300
+
+# Logging
+ZENML_LOGGING_VERBOSITY=INFO  # DEBUG, INFO, WARNING, ERROR
+ZENML_DEBUG=false
+ZENML_ANALYTICS_OPT_IN=true
+```
+
+### Database SSL Configuration
+
+```yaml
+services:
+  zenml:
+    environment:
+      - ZENML_STORE_SSL=true
+      - ZENML_STORE_SSL_VERIFY_SERVER_CERT=true
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/client-cert.pem:/certs/client-cert.pem:ro
+      - ./certs/client-key.pem:/certs/client-key.pem:ro
+    environment:
+      - ZENML_STORE_SSL_CA=/certs/ca.crt
+      - ZENML_STORE_SSL_CERT=/certs/client-cert.pem
+      - ZENML_STORE_SSL_KEY=/certs/client-key.pem
+```
+
+### Secrets Store Configuration
+
+#### AWS Secrets Manager
+
+```yaml
+services:
+  zenml:
+    environment:
+      - ZENML_SECRETS_STORE_TYPE=aws
+      - ZENML_SECRETS_STORE_AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+```
+
+#### GCP Secret Manager
+
+```yaml
+services:
+  zenml:
+    environment:
+      - ZENML_SECRETS_STORE_TYPE=gcp
+      - ZENML_SECRETS_STORE_GCP_PROJECT_ID=my-project
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
+    volumes:
+      - ./gcp-credentials.json:/secrets/gcp-credentials.json:ro
+```
+
+#### Azure Key Vault
+
+```yaml
+services:
+  zenml:
+    environment:
+      - ZENML_SECRETS_STORE_TYPE=azure
+      - ZENML_SECRETS_STORE_AZURE_KEY_VAULT_NAME=zenml-vault
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+```
+
+## Docker Image Architecture
+
+### Base Image Structure
+
+The ZenML server image is built with security and efficiency in mind:
+
+```dockerfile
+# Multi-stage build for minimal image size
+FROM python:3.11-slim-bookworm AS base
+
+# Non-root user for security
+USER zenml:zenml
+
+# Optimized Python environment
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PIP_NO_CACHE_DIR=1 \
+    ZENML_CONTAINER=1
+
+# Health check endpoint
+HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
+
+# Default command
+CMD ["uvicorn", "zenml.zen_server.zen_server_api:app", \
+     "--host", "0.0.0.0", "--port", "8080"]
+```
+
+### Installed Dependencies
+
+Production image includes:
+- ZenML server with FastAPI
+- Database connectors (MySQL, PostgreSQL)
+- Cloud secrets managers (AWS, GCP, Azure, HashiCorp)
+- Cloud storage support (S3, GCS, Azure Blob)
+- Service connectors
+
+### Image Variants
+
+**Production Image** (`zenml-server:latest`)
+- Minimal size (~500MB)
+- No development tools
+- Optimized for performance
+- Runs as non-root user
+
+**Development Image** (`zenml-server:dev`)
+- Includes debugging tools
+- MySQL/MariaDB clients
+- Network utilities
+- Source code included
+
+## Advanced Deployment Patterns
+
+### Reverse Proxy with Nginx
+
+```yaml
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - zenml
+    networks:
+      - zenml-network
+
+  zenml:
+    image: zenmldocker/zenml-server:latest
+    expose:
+      - "8080"
+    environment:
+      - ZENML_SERVER_URL=https://zenml.example.com
+    networks:
+      - zenml-network
+
+networks:
+  zenml-network:
+```
+
+Nginx configuration (`nginx.conf`):
+
+```nginx
+http {
+    upstream zenml {
+        server zenml:8080;
+    }
+
+    server {
+        listen 80;
+        server_name zenml.example.com;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name zenml.example.com;
+
+        ssl_certificate /etc/nginx/certs/cert.pem;
+        ssl_certificate_key /etc/nginx/certs/key.pem;
+
+        location / {
+            proxy_pass http://zenml;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+        }
+    }
+}
+```
+
+### Multi-Container Setup with Redis
+
+Add caching layer:
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: zenml-redis
+    networks:
+      - zenml-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  zenml:
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+```
+
+### Resource Limits
+
+Configure container resource constraints:
+
+```yaml
+services:
+  zenml:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+```
+
+## Monitoring and Logging
+
+### Health Checks
+
+```yaml
+services:
+  zenml:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+### Logging Configuration
+
+```yaml
+services:
+  zenml:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service,environment"
+```
+
+### Centralized Logging
+
+Ship logs to external system:
+
+```yaml
+services:
+  zenml:
+    logging:
+      driver: "syslog"
+      options:
+        syslog-address: "tcp://logserver:514"
+        tag: "zenml-server"
+```
+
+## Backup and Recovery
+
+### Database Backup
+
+Backup MySQL database:
+
+```bash
+# Create backup
+docker-compose exec mysql mysqldump \
+  -u root -p${MYSQL_ROOT_PASSWORD} \
+  zenml > zenml-backup-$(date +%Y%m%d).sql
+
+# Restore from backup
+docker-compose exec -T mysql mysql \
+  -u root -p${MYSQL_ROOT_PASSWORD} \
+  zenml < zenml-backup-20240309.sql
+```
+
+### Volume Backup
+
+Backup Docker volumes:
+
+```bash
+# Backup volume to tar
+docker run --rm \
+  -v zenml-data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/zenml-data-backup.tar.gz -C /data .
+
+# Restore volume from tar
+docker run --rm \
+  -v zenml-data:/data \
+  -v $(pwd):/backup \
+  alpine tar xzf /backup/zenml-data-backup.tar.gz -C /data
+```
+
+### Automated Backups
+
+Add backup service to docker-compose:
+
+```yaml
+services:
+  backup:
+    image: alpine
+    depends_on:
+      - mysql
+    volumes:
+      - mysql-data:/data:ro
+      - ./backups:/backups
+    command: |
+      sh -c '
+        while true; do
+          tar czf /backups/backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
+          find /backups -type f -mtime +7 -delete
+          sleep 86400
+        done
+      '
+```
+
+## Security Best Practices
+
+### Run as Non-Root User
+
+The ZenML image runs as user `zenml:zenml` (UID:GID 1000:1000):
+
+```yaml
+services:
+  zenml:
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp
+```
+
+### Secrets Management
+
+Use Docker secrets for sensitive data:
+
+```yaml
+services:
+  zenml:
+    secrets:
+      - mysql_password
+      - jwt_secret
+    environment:
+      - ZENML_STORE_PASSWORD_FILE=/run/secrets/mysql_password
+      - ZENML_AUTH_JWT_SECRET_KEY_FILE=/run/secrets/jwt_secret
+
+secrets:
+  mysql_password:
+    file: ./secrets/mysql_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+```
+
+### Network Isolation
+
+```yaml
+services:
+  mysql:
+    networks:
+      - backend
+  
+  zenml:
+    networks:
+      - backend
+      - frontend
+
+networks:
+  backend:
+    internal: true
+  frontend:
+```
+
+## Troubleshooting
+
+### Container Won't Start
+
+Check container logs:
+
+```bash
+docker logs zenml-server
+docker-compose logs zenml
+```
+
+### Database Connection Issues
+
+Test database connectivity:
+
+```bash
+# Test from ZenML container
+docker-compose exec zenml nc -zv mysql 3306
+
+# Check MySQL logs
+docker-compose logs mysql
+```
+
+### Permission Issues
+
+Fix volume permissions:
+
+```bash
+# Check volume ownership
+docker-compose exec zenml ls -la /zenml/.zenconfig
+
+# Fix permissions
+docker-compose exec --user root zenml chown -R zenml:zenml /zenml/.zenconfig
+```
+
+### High Memory Usage
+
+Monitor container resources:
+
+```bash
+# Check resource usage
+docker stats zenml-server
+
+# Check container configuration
+docker inspect zenml-server | grep -A 10 "Memory"
+```
+
+## Maintenance Operations
+
+### Update to New Version
+
+```bash
+# Pull latest image
+docker-compose pull zenml
+
+# Restart with new image
+docker-compose up -d --force-recreate zenml
+```
+
+### Database Migration
+
+Migrations run automatically on startup. To run manually:
+
+```bash
+docker-compose exec zenml zenml migrate
+```
+
+### Clean Up Resources
+
+```bash
+# Remove stopped containers
+docker-compose down
+
+# Remove containers and volumes (WARNING: deletes data)
+docker-compose down -v
+
+# Remove unused images
+docker image prune -a
+```
+
+## Performance Optimization
+
+### Connection Pooling
+
+```yaml
+services:
+  zenml:
+    environment:
+      - ZENML_STORE_POOL_SIZE=20
+      - ZENML_STORE_MAX_OVERFLOW=20
+      - ZENML_SERVER_THREAD_POOL_SIZE=40
+```
+
+### Resource Allocation
+
+```yaml
+services:
+  zenml:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+  
+  mysql:
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    command: >
+      --max_connections=200
+      --innodb_buffer_pool_size=2G
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Kubernetes Deployment" href="/deployment/kubernetes" icon="dharmachakra">
+    Scale to production with Kubernetes
+  </Card>
+  
+  <Card title="Configuration Guide" href="/how-to/configure-zenml-server" icon="gear">
+    Advanced server configuration
+  </Card>
+  
+  <Card title="Custom Docker Builds" href="/how-to/customize-docker-builds" icon="docker">
+    Build custom ZenML images
+  </Card>
+</CardGroup>
+
+## Reference
+
+- [Docker Hub: zenml-server](https://hub.docker.com/r/zenmldocker/zenml-server)
+- [ZenML Docker Source](https://github.com/zenml-io/zenml/tree/main/docker)
+- [Docker Compose Documentation](https://docs.docker.com/compose/)

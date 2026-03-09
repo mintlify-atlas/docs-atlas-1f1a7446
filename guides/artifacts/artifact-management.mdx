@@ -1,0 +1,532 @@
+---
+title: Artifact Management
+description: Learn how ZenML tracks, versions, and manages pipeline artifacts
+---
+
+Artifacts are the data objects produced by pipeline steps. ZenML automatically tracks, versions, and stores all artifacts, making it easy to trace data lineage, reproduce results, and share outputs across pipeline runs.
+
+## Understanding Artifacts
+
+Every output from a step becomes an artifact:
+
+```python
+from zenml import step, pipeline
+from typing import Annotated
+
+@step
+def load_data() -> Annotated[dict, "dataset"]:
+    """This returns an artifact named 'dataset'."""
+    return {"values": [1, 2, 3, 4, 5]}
+
+@step
+def process_data(dataset: dict) -> Annotated[list, "processed"]:
+    """This takes 'dataset' artifact and produces 'processed' artifact."""
+    return [x * 2 for x in dataset["values"]]
+```
+
+ZenML automatically:
+- Serializes outputs and stores them
+- Versions each artifact
+- Tracks lineage (which step produced it)
+- Links artifacts to pipeline runs
+
+## Naming Artifacts
+
+<Steps>
+
+### Step 1: Use Annotated for Automatic Naming
+
+The second argument in `Annotated` becomes the artifact name:
+
+```python
+from typing import Annotated
+
+@step
+def train_model() -> Annotated[object, "trained_model"]:
+    """Produces an artifact named 'trained_model'."""
+    model = {"weights": [1, 2, 3]}
+    return model
+```
+
+### Step 2: Configure Custom Names
+
+Use `ArtifactConfig` for more control:
+
+```python
+from zenml import step, ArtifactConfig
+from typing import Annotated
+
+@step
+def train_model() -> Annotated[
+    object,
+    ArtifactConfig(
+        name="production_model",
+        version=42,
+        tags=["production", "v2"]
+    )
+]:
+    """Produces a configured artifact."""
+    model = {"weights": [1, 2, 3]}
+    return model
+```
+
+### Step 3: Dynamic Naming with Placeholders
+
+Create dynamic artifact names:
+
+```python
+from zenml import step, ArtifactConfig
+from typing import Annotated
+
+@step
+def train_model() -> Annotated[
+    object,
+    ArtifactConfig(
+        name="model_{date}_{time}",
+    )
+]:
+    """Creates artifacts like 'model_20260309_143022'."""
+    model = {"weights": [1, 2, 3]}
+    return model
+```
+
+With custom placeholders:
+
+```python
+@step(
+    substitutions={"model_version": "v2.1"}
+)
+def train_model() -> Annotated[
+    object,
+    ArtifactConfig(
+        name="model_{model_version}_{date}",
+    )
+]:
+    """Creates artifacts like 'model_v2.1_20260309'."""
+    model = {"weights": [1, 2, 3]}
+    return model
+```
+
+</Steps>
+
+## Artifact Configuration
+
+### Adding Tags
+
+Tag artifacts for easy discovery:
+
+```python
+from zenml import step, ArtifactConfig
+from typing import Annotated
+
+@step
+def train_model() -> Annotated[
+    object,
+    ArtifactConfig(
+        name="model",
+        tags=["experiment", "baseline", "rf-classifier"]
+    )
+]:
+    """Model artifact with searchable tags."""
+    return train_random_forest()
+```
+
+### Setting Artifact Type
+
+Specify the semantic type of an artifact:
+
+```python
+from zenml import step, ArtifactConfig
+from zenml.enums import ArtifactType
+from typing import Annotated
+
+@step
+def train_model() -> Annotated[
+    object,
+    ArtifactConfig(
+        name="model",
+        artifact_type=ArtifactType.MODEL  # Semantic type
+    )
+]:
+    """Explicitly mark this as a MODEL artifact."""
+    return model
+
+@step
+def generate_report() -> Annotated[
+    str,
+    ArtifactConfig(
+        name="report",
+        artifact_type=ArtifactType.DATA  # Mark as DATA
+    )
+]:
+    """Generate a data report."""
+    return "Model evaluation report: ..."
+```
+
+### Adding Metadata
+
+Attach metadata to artifacts:
+
+```python
+from zenml import step, ArtifactConfig
+from typing import Annotated
+
+@step
+def train_model(
+    learning_rate: float,
+    epochs: int
+) -> Annotated[
+    object,
+    ArtifactConfig(
+        name="model",
+        run_metadata={
+            "learning_rate": learning_rate,
+            "epochs": epochs,
+            "framework": "scikit-learn",
+            "accuracy": 0.95
+        }
+    )
+]:
+    """Model with attached metadata."""
+    model = train(learning_rate=learning_rate, epochs=epochs)
+    return model
+```
+
+## Multiple Artifacts
+
+Return multiple artifacts from a single step:
+
+```python
+from typing import Tuple, Annotated
+from zenml import step, ArtifactConfig
+
+@step
+def split_and_train() -> Tuple[
+    Annotated[dict, ArtifactConfig(name="train_data", tags=["training"])],
+    Annotated[dict, ArtifactConfig(name="test_data", tags=["testing"])],
+    Annotated[object, ArtifactConfig(name="model", tags=["trained"])],
+]:
+    """Produce three separate artifacts."""
+    # Split data
+    train_data = {"X": [...], "y": [...]}
+    test_data = {"X": [...], "y": [...]}
+    
+    # Train model
+    model = train_on_data(train_data)
+    
+    return train_data, test_data, model
+```
+
+Use in pipeline:
+
+```python
+@pipeline
+def ml_pipeline():
+    train_data, test_data, model = split_and_train()
+    
+    # Use individual artifacts
+    metrics = evaluate(model, test_data)
+    report = generate_report(metrics)
+```
+
+## Loading Artifacts
+
+### From the Client
+
+Load artifacts using the ZenML client:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Load latest version of an artifact by name
+artifact = client.get_artifact_version(name="trained_model")
+model = artifact.load()
+
+# Load specific version
+artifact = client.get_artifact_version(
+    name="trained_model",
+    version="42"
+)
+model = artifact.load()
+
+# Load by ID
+artifact = client.get_artifact_version(
+    name_id_or_prefix="550e8400-e29b-41d4-a716-446655440000"
+)
+model = artifact.load()
+```
+
+### From Step Context
+
+Access artifacts from previous runs:
+
+```python
+from zenml import step, get_step_context
+from zenml.client import Client
+
+@step
+def compare_models(current_model: object) -> dict:
+    """Compare current model with production model."""
+    client = Client()
+    
+    # Load production model artifact
+    production_artifact = client.get_artifact_version(
+        name="production_model"
+    )
+    production_model = production_artifact.load()
+    
+    # Compare models
+    current_accuracy = evaluate(current_model)
+    production_accuracy = evaluate(production_model)
+    
+    return {
+        "current": current_accuracy,
+        "production": production_accuracy,
+        "improvement": current_accuracy - production_accuracy
+    }
+```
+
+### From Previous Pipeline Runs
+
+Load artifacts from specific pipeline runs:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get a specific pipeline run
+run = client.get_pipeline_run("my_pipeline_run_name")
+
+# Load artifact from a specific step
+model = run.steps["train_model"].outputs["trained_model"].load()
+
+# Or get the output directly if there's only one
+model = run.steps["train_model"].output.load()
+```
+
+## Artifact Versioning
+
+ZenML automatically versions artifacts:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# List all versions of an artifact
+artifact_versions = client.list_artifact_versions(
+    name="trained_model"
+)
+
+for version in artifact_versions:
+    print(f"Version {version.version}: {version.id}")
+    print(f"  Created: {version.created}")
+    print(f"  Tags: {version.tags}")
+```
+
+### Version Promotion Workflow
+
+```python
+@step
+def promote_model_to_production(metrics: dict) -> None:
+    """Promote model if it meets criteria."""
+    client = Client()
+    
+    if metrics["accuracy"] > 0.95:
+        # Get the current model from this run
+        context = get_step_context()
+        current_run = context.pipeline_run
+        model_artifact = current_run.steps["train_model"].output
+        
+        # Update tags to mark as production
+        client.update_artifact_version(
+            artifact_version_id=model_artifact.id,
+            tags=["production", "promoted"]
+        )
+        
+        print(f"Model {model_artifact.id} promoted to production")
+    else:
+        print("Model did not meet promotion criteria")
+```
+
+## Searching Artifacts
+
+Find artifacts using filters:
+
+```python
+from zenml.client import Client
+from zenml.models import ArtifactVersionFilter
+
+client = Client()
+
+# Find artifacts by name pattern
+artifacts = client.list_artifact_versions(
+    name="model"
+)
+
+# Filter by tags
+artifacts = client.list_artifact_versions(
+    tag="production"
+)
+
+# Complex filters
+filter = ArtifactVersionFilter(
+    name="trained_model",
+    tag="production",
+)
+artifacts = client.list_artifact_versions(filter=filter)
+
+for artifact in artifacts:
+    print(f"{artifact.name} v{artifact.version}: {artifact.id}")
+```
+
+## Artifact Lineage
+
+Track where artifacts come from and where they're used:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get an artifact
+artifact = client.get_artifact_version(name="trained_model")
+
+# Find which step produced it
+producer_step = artifact.producer_step_run
+print(f"Produced by: {producer_step.name}")
+print(f"In pipeline: {producer_step.pipeline_run.name}")
+
+# Find which steps consumed it (if any)
+# Navigate through pipeline runs to find consumers
+```
+
+## Artifact Visualization
+
+Some artifacts can be visualized in the ZenML dashboard:
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+from zenml import step
+from typing import Annotated
+
+@step
+def analyze_data() -> Annotated[pd.DataFrame, "analysis"]:
+    """DataFrame artifacts are automatically visualized."""
+    df = pd.DataFrame({
+        "metric": ["accuracy", "precision", "recall"],
+        "value": [0.95, 0.93, 0.96]
+    })
+    return df
+
+@step
+def create_plot() -> Annotated[plt.Figure, "performance_plot"]:
+    """Matplotlib figures are visualized in the dashboard."""
+    fig, ax = plt.subplots()
+    ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
+    ax.set_title("Model Performance")
+    return fig
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Use Descriptive Names" icon="tag">
+Give artifacts clear, meaningful names that describe their contents
+</Card>
+
+<Card title="Tag Consistently" icon="tags">
+Use a consistent tagging strategy across your team
+</Card>
+
+<Card title="Add Rich Metadata" icon="circle-info">
+Attach relevant metadata to help track experiments and results
+</Card>
+
+<Card title="Version Strategically" icon="code-branch">
+Use explicit versioning for important artifacts
+</Card>
+
+<Card title="Clean Up Old Artifacts" icon="trash">
+Periodically remove unused artifacts to save storage
+</Card>
+
+<Card title="Document Artifact Structure" icon="book">
+Document the schema/structure of complex artifacts
+</Card>
+
+</CardGroup>
+
+## Artifact Storage
+
+Artifacts are stored in the artifact store configured in your stack:
+
+```bash
+# View current artifact store
+zenml stack describe
+
+# List available artifact stores
+zenml artifact-store list
+
+# Register a new artifact store (e.g., S3)
+zenml artifact-store register my_s3_store \
+  --flavor=s3 \
+  --path=s3://my-bucket/zenml-artifacts
+```
+
+## Troubleshooting
+
+### Artifact Not Found
+
+If you can't find an artifact:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# List all artifacts to find the right name
+all_artifacts = client.list_artifact_versions()
+for artifact in all_artifacts:
+    print(f"{artifact.name} v{artifact.version}")
+```
+
+### Loading Fails
+
+If artifact loading fails, check:
+
+1. Artifact store is accessible
+2. Required dependencies are installed
+3. Artifact hasn't been deleted
+
+```python
+try:
+    artifact = client.get_artifact_version(name="model")
+    model = artifact.load()
+except Exception as e:
+    print(f"Failed to load artifact: {e}")
+    print(f"Artifact store: {client.active_stack.artifact_store.name}")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Writing Steps" href="/guides/steps/writing-steps" icon="stairs">
+Learn how to create steps that produce artifacts
+</Card>
+
+<Card title="Step Context" href="/guides/steps/step-context" icon="circle-info">
+Access artifacts within step execution
+</Card>
+
+<Card title="Stack Configuration" href="/guides/stacks/configuring-stacks" icon="layer-group">
+Configure artifact stores for your pipelines
+</Card>
+
+</CardGroup>

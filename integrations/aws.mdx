@@ -1,0 +1,433 @@
+---
+title: AWS Integration
+description: Connect ZenML to Amazon Web Services for scalable ML infrastructure
+---
+
+The AWS integration provides comprehensive support for running ZenML pipelines on Amazon Web Services infrastructure, including SageMaker orchestration, S3 artifact storage, and ECR container registries.
+
+## Installation
+
+```bash
+pip install "zenml[aws]"
+```
+
+This installs the following packages:
+- `sagemaker>=2.237.3,<3.0.0` - SageMaker SDK
+- `kubernetes` - Kubernetes Python client
+- `aws-profile-manager` - AWS profile management
+- `pytz>=2021.1` - Timezone support
+
+## Available Components
+
+The AWS integration provides these stack components:
+
+<CardGroup cols={2}>
+  <Card title="SageMaker Orchestrator" icon="diagram-project">
+    Execute pipelines using AWS SageMaker Pipelines
+  </Card>
+  <Card title="SageMaker Step Operator" icon="shoe-prints">
+    Run individual steps on SageMaker Training or Processing jobs
+  </Card>
+  <Card title="ECR Container Registry" icon="docker">
+    Store Docker images in Amazon Elastic Container Registry
+  </Card>
+  <Card title="AWS Image Builder" icon="hammer">
+    Build container images using AWS services
+  </Card>
+</CardGroup>
+
+## Authentication
+
+There are three ways to authenticate with AWS:
+
+### 1. Service Connector (Recommended)
+
+```python
+from zenml.client import Client
+
+Client().create_service_connector(
+    name="aws-connector",
+    type="aws",
+    auth_method="secret-key",
+    configuration={
+        "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "region": "us-east-1",
+    },
+)
+```
+
+### 2. Explicit Credentials
+
+```bash
+zenml orchestrator register sagemaker-orch \
+    --flavor=sagemaker \
+    --execution_role=arn:aws:iam::123456789:role/SageMakerRole \
+    --aws_access_key_id=AKIAIOSFODNN7EXAMPLE \
+    --aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
+    --region=us-east-1
+```
+
+### 3. Default AWS Configuration
+
+If no credentials are provided, ZenML uses the default AWS configuration from:
+- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+- AWS credentials file (`~/.aws/credentials`)
+- IAM role (when running on EC2/ECS/Lambda)
+
+## SageMaker Orchestrator
+
+The SageMaker orchestrator runs your complete pipeline as a SageMaker Pipeline.
+
+### Configuration
+
+```bash
+zenml orchestrator register sagemaker-orch \
+    --flavor=sagemaker \
+    --execution_role=arn:aws:iam::123456789012:role/SageMakerExecutionRole \
+    --region=us-west-2 \
+    --bucket=my-sagemaker-bucket
+```
+
+**Required Parameters:**
+- `execution_role` - IAM role ARN with SageMaker permissions
+
+**Optional Parameters:**
+- `region` - AWS region (defaults to default AWS config)
+- `bucket` - S3 bucket for artifacts (defaults to `sagemaker-{region}-{account-id}`)
+- `scheduler_role` - IAM role ARN for scheduled pipelines
+- `aws_profile` - AWS profile name from `~/.aws/credentials`
+
+### IAM Permissions
+
+The execution role needs these permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreatePipeline",
+        "sagemaker:StartPipelineExecution",
+        "sagemaker:DescribePipelineExecution",
+        "sagemaker:CreateProcessingJob",
+        "sagemaker:CreateTrainingJob",
+        "sagemaker:DescribeProcessingJob",
+        "sagemaker:DescribeTrainingJob"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::my-sagemaker-bucket/*",
+        "arn:aws:s3:::my-sagemaker-bucket"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### Step-Level Settings
+
+Customize individual steps with SageMaker-specific settings:
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.aws.flavors.sagemaker_orchestrator_flavor import (
+    SagemakerOrchestratorSettings,
+)
+
+@step(
+    settings={
+        "orchestrator": SagemakerOrchestratorSettings(
+            instance_type="ml.p3.2xlarge",  # GPU instance
+            volume_size_in_gb=100,
+            max_runtime_in_seconds=7200,  # 2 hours
+            environment={
+                "CUDA_VISIBLE_DEVICES": "0",
+            },
+            tags={"team": "ml-ops", "project": "recommendation"},
+        )
+    }
+)
+def train_model(data: pd.DataFrame) -> Model:
+    # Training code runs on specified instance type
+    ...
+
+@step(
+    settings={
+        "orchestrator": SagemakerOrchestratorSettings(
+            instance_type="ml.t3.medium",  # Cheap instance for preprocessing
+            volume_size_in_gb=30,
+        )
+    }
+)
+def preprocess_data() -> pd.DataFrame:
+    ...
+
+@pipeline
+def training_pipeline():
+    data = preprocess_data()
+    train_model(data)
+```
+
+**Available Settings:**
+- `instance_type` - EC2 instance type (default: `ml.m5.xlarge` for training, `ml.t3.medium` for processing)
+- `volume_size_in_gb` - EBS volume size (default: 30)
+- `max_runtime_in_seconds` - Maximum execution time (default: 86400 = 24 hours)
+- `execution_role` - Override orchestrator's execution role
+- `environment` - Environment variables for the container
+- `tags` - AWS tags for the job
+- `synchronous` - Wait for pipeline completion (default: True)
+
+### Instance Types
+
+Common SageMaker instance types:
+
+| Instance Type | vCPUs | RAM | GPU | Use Case |
+|---------------|-------|-----|-----|----------|
+| ml.t3.medium | 2 | 4 GB | - | Light preprocessing |
+| ml.m5.xlarge | 4 | 16 GB | - | Standard training |
+| ml.m5.4xlarge | 16 | 64 GB | - | Large-scale preprocessing |
+| ml.p3.2xlarge | 8 | 61 GB | 1x V100 | Deep learning training |
+| ml.p3.8xlarge | 32 | 244 GB | 4x V100 | Distributed training |
+| ml.g4dn.xlarge | 4 | 16 GB | 1x T4 | Inference/light training |
+
+See [SageMaker pricing](https://aws.amazon.com/sagemaker/pricing/) for costs.
+
+## SageMaker Step Operator
+
+The step operator runs individual steps as SageMaker jobs while orchestrating locally or with another orchestrator.
+
+### Configuration
+
+```bash
+zenml step-operator register sagemaker-step-op \
+    --flavor=sagemaker \
+    --role=arn:aws:iam::123456789012:role/SageMakerExecutionRole \
+    --region=us-west-2
+```
+
+### Usage
+
+```python
+from zenml import step, pipeline
+
+@step(step_operator="sagemaker-step-op")
+def train_on_sagemaker(data: pd.DataFrame) -> Model:
+    # This step runs on SageMaker
+    ...
+
+@step
+def preprocess_locally(raw_data: pd.DataFrame) -> pd.DataFrame:
+    # This step runs locally or on local orchestrator
+    ...
+
+@pipeline
+def hybrid_pipeline():
+    data = preprocess_locally(...)  # Runs locally
+    model = train_on_sagemaker(data)  # Runs on SageMaker
+```
+
+## ECR Container Registry
+
+Store Docker images in Amazon Elastic Container Registry.
+
+### Configuration
+
+```bash
+zenml container-registry register ecr-registry \
+    --flavor=aws \
+    --uri=123456789012.dkr.ecr.us-west-2.amazonaws.com
+```
+
+The URI format is: `{account-id}.dkr.ecr.{region}.amazonaws.com`
+
+### Usage
+
+ZenML automatically pushes and pulls images from ECR when building Docker images for remote execution:
+
+```python
+from zenml import pipeline
+
+@pipeline(enable_cache=False)
+def my_pipeline():
+    # ZenML builds and pushes image to ECR automatically
+    ...
+```
+
+## Complete Stack Example
+
+Here's a complete production-ready AWS stack:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Create service connector
+aws_connector = client.create_service_connector(
+    name="aws-prod",
+    type="aws",
+    auth_method="secret-key",
+    configuration={
+        "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "region": "us-west-2",
+    },
+)
+
+# Register components
+zenml orchestrator register sagemaker-prod \
+    --flavor=sagemaker \
+    --execution_role=arn:aws:iam::123456789012:role/SageMakerRole \
+    --region=us-west-2 \
+    --bucket=my-ml-artifacts
+
+zenml container-registry register ecr-prod \
+    --flavor=aws \
+    --uri=123456789012.dkr.ecr.us-west-2.amazonaws.com
+
+zenml artifact-store register s3-prod \
+    --flavor=s3 \
+    --path=s3://my-ml-artifacts
+
+# Create stack
+zenml stack register aws-prod \
+    -o sagemaker-prod \
+    -a s3-prod \
+    -c ecr-prod
+
+# Activate stack
+zenml stack set aws-prod
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use IAM Roles for EC2/ECS">
+    When running ZenML from EC2 or ECS, attach an IAM role to the instance instead of using access keys:
+    
+    ```bash
+    # No credentials needed - uses instance role
+    zenml orchestrator register sagemaker-orch \
+        --flavor=sagemaker \
+        --execution_role=arn:aws:iam::123456789012:role/SageMakerRole
+    ```
+  </Accordion>
+
+  <Accordion title="Separate Execution Roles">
+    Use different execution roles for different environments:
+    
+    - Development: Limited permissions, small instance types
+    - Staging: Broader permissions for testing
+    - Production: Full permissions, all instance types
+  </Accordion>
+
+  <Accordion title="Use S3 Bucket Policy">
+    Restrict S3 bucket access to specific roles:
+    
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "AWS": "arn:aws:iam::123456789012:role/SageMakerRole"
+          },
+          "Action": "s3:*",
+          "Resource": [
+            "arn:aws:s3:::my-sagemaker-bucket/*",
+            "arn:aws:s3:::my-sagemaker-bucket"
+          ]
+        }
+      ]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Tag Resources">
+    Use tags for cost tracking and resource management:
+    
+    ```python
+    @step(
+        settings={
+            "orchestrator": SagemakerOrchestratorSettings(
+                tags={
+                    "Environment": "Production",
+                    "Team": "ML-Ops",
+                    "Project": "Recommendation",
+                    "CostCenter": "Engineering",
+                }
+            )
+        }
+    )
+    def train_model():
+        ...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Access Denied Errors">
+    If you see "Access Denied" errors, check:
+    
+    1. IAM role has correct permissions
+    2. Trust relationship allows SageMaker to assume the role
+    3. S3 bucket policy allows access from the role
+    4. ECR repository policy allows image pulls
+  </Accordion>
+
+  <Accordion title="Instance Type Not Available">
+    Some instance types are not available in all regions. If you get an error:
+    
+    1. Check [instance type availability](https://aws.amazon.com/sagemaker/pricing/)
+    2. Request quota increase in AWS Service Quotas
+    3. Use a different instance type
+  </Accordion>
+
+  <Accordion title="Pipeline Execution Timeout">
+    If pipelines timeout:
+    
+    1. Increase `max_runtime_in_seconds` in step settings
+    2. Use `synchronous=False` for long-running pipelines
+    3. Monitor execution in SageMaker console
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SageMaker Documentation" href="./sagemaker">
+    Detailed SageMaker orchestrator guide
+  </Card>
+  <Card title="S3 Artifact Store" href="../stack-components/artifact-stores">
+    Configure S3 for artifact storage
+  </Card>
+  <Card title="Service Connectors" href="../stack-components/service-connectors">
+    Advanced authentication options
+  </Card>
+  <Card title="Remote Execution" href="../user-guide/production">
+    Production deployment patterns
+  </Card>
+</CardGroup>

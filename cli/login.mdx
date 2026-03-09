@@ -1,0 +1,402 @@
+---
+title: zenml login
+description: Connect to ZenML Pro, self-hosted servers, or start a local server.
+---
+
+The `zenml login` command connects your CLI client to a ZenML server. This works with ZenML Pro, self-hosted servers, or local deployments.
+
+## Quick Start
+
+### Connect to ZenML Pro
+
+```bash
+zenml login
+```
+
+This opens an interactive menu with login options, defaulting to ZenML Pro - perfect for getting started with the trial.
+
+### Connect to Remote Server
+
+```bash
+zenml login https://zenml.example.com
+```
+
+### Start Local Server
+
+```bash
+zenml login --local
+```
+
+## Basic Usage
+
+The `zenml login` command has context-aware behavior:
+
+**When not connected to a server:**
+- Displays an interactive menu with three options:
+  1. Login to a local server
+  2. Login to ZenML Pro  
+  3. Login to a custom cloud server
+
+**When already connected:**
+- Triggers a new web login flow to refresh your session
+- Use this when your CLI session expires
+
+## Command Options
+
+### Server Argument
+
+The optional `SERVER` argument can be:
+
+- **A URL**: `https://zenml.example.com`
+- **ZenML Pro server name**: `my-company-server`
+- **ZenML Pro server UUID**: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+- **SQL database URL**: `mysql://user:pass@host:port/database`
+
+```bash
+zenml login <SERVER>
+```
+
+<Note>
+Passing a SERVER argument skips the web login flow if your session is still valid. Use `--refresh` to force re-authentication.
+</Note>
+
+### Login Flags
+
+| Flag | Description |
+|------|-------------|
+| `--pro` | Login to ZenML Pro regardless of current state |
+| `--refresh` | Force a new login flow even if session is valid |
+| `--local` | Start and connect to a local server |
+| `--api-key` | Authenticate using an API key instead of web login |
+| `--project` | Set active project immediately after connecting |
+
+### Local Server Options
+
+When using `--local`, customize the server deployment:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--blocking` | Flag | Run server as a foreground process (blocks CLI until stopped) |
+| `--docker` | Flag | Start server as a Docker container instead of local process |
+| `--port` | Integer | Custom TCP port for the server (default: 8237) |
+| `--ip-address` | IP Address | Listen on a specific IP (default: 127.0.0.1) |
+| `--image` | String | Custom Docker image (only with `--docker`) |
+| `--ngrok-token` | String | Ngrok auth token for public URL (useful in Google Colab) |
+| `--restart` | Flag | Force restart of existing local server |
+
+## Examples
+
+### Interactive Login (ZenML Pro)
+
+```bash
+zenml login
+```
+
+Output:
+```
+┌─────────────────────────────────────────────────┐
+│              ZenML Login                        │
+│                                                 │
+│  Choose your login method:                      │
+│                                                 │
+│  1. Login to a local server  (zenml login --local) │
+│  2. Login to ZenML Pro       (https://cloud.zenml.io) │
+│  3. Login to a cloud server  (custom URL)      │
+└─────────────────────────────────────────────────┘
+
+Enter your choice [2]: 
+```
+
+### Connect to Remote Server
+
+```bash
+zenml login https://zenml.example.com
+```
+
+This opens your browser for authentication. After login:
+
+```
+✔ Successfully logged in to https://zenml.example.com
+✔ Active project: default
+```
+
+### Start Local Server (Background)
+
+```bash
+zenml login --local
+```
+
+Output:
+```
+Starting local ZenML server...
+✔ Local server started successfully!
+✔ Dashboard available at http://127.0.0.1:8237
+✔ Connected to local server
+```
+
+### Start Local Docker Server
+
+```bash
+zenml login --local --docker
+```
+
+### Start Local Server on Custom Port
+
+```bash
+zenml login --local --port 9000
+```
+
+### Run Local Server in Foreground
+
+```bash
+zenml login --local --blocking
+```
+
+The server runs in your terminal. Press `Ctrl+C` to stop.
+
+### Login with API Key
+
+```bash
+zenml login https://zenml.example.com --api-key
+```
+
+You'll be prompted to enter your API key:
+```
+Enter API key: ****************************************
+✔ Successfully authenticated with API key
+```
+
+### Login and Set Project
+
+```bash
+zenml login https://zenml.example.com --project my-ml-project
+```
+
+This connects to the server and immediately switches to the specified project.
+
+### Refresh Existing Session
+
+```bash
+zenml login --refresh
+```
+
+Forces a new authentication flow even if your current session is still valid.
+
+### Expose Local Server with Ngrok
+
+```bash
+zenml login --local --ngrok-token YOUR_NGROK_TOKEN
+```
+
+Useful for accessing the dashboard from Google Colab or remote environments.
+
+### Restart Local Server
+
+```bash
+zenml login --local --restart
+```
+
+Stops any existing local server and starts a fresh instance.
+
+## Multiple Server Management
+
+The CLI can authenticate to multiple servers simultaneously, though only one is active at a time.
+
+### List Available Servers
+
+```bash
+zenml server list
+```
+
+Output:
+```
+┏━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━┓
+┃ Name    │ URL                       │ Active  ┃
+┠─────────┼───────────────────────────┼─────────┨
+┃ prod    │ https://prod.zenml.io     │    ✔    ┃
+┃ staging │ https://staging.zenml.io  │         ┃
+┃ local   │ http://127.0.0.1:8237     │         ┃
+┗━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━┛
+```
+
+### Switch Between Servers
+
+```bash
+zenml login staging
+zenml login prod
+zenml login local
+```
+
+## API Key Authentication
+
+API keys provide non-interactive authentication, ideal for CI/CD pipelines.
+
+### Generate API Key
+
+In the ZenML dashboard:
+1. Go to **Settings** → **API Keys**
+2. Click **Generate New Key**
+3. Copy the key (starts with `znml_`)
+
+### Use API Key in CLI
+
+```bash
+zenml login https://zenml.example.com --api-key
+# Paste your API key when prompted
+```
+
+### Use API Key in Environment Variable
+
+```bash
+export ZENML_API_KEY="znml_xxxxxxxxxxxxxxxxxxxxxxxx"
+zenml login https://zenml.example.com
+```
+
+## Local Server Deployment
+
+Local servers are perfect for development and testing.
+
+### Process vs Docker
+
+**Process Mode** (default):
+- Faster startup
+- Uses your local Python environment
+- Lightweight
+
+**Docker Mode** (`--docker`):
+- Isolated environment
+- Consistent across machines
+- Easier to clean up
+
+### Custom Docker Image
+
+```bash
+zenml login --local --docker --image custom-zenml:latest
+```
+
+### Accessing Local Server Remotely
+
+By default, local servers only accept connections from `127.0.0.1`. To allow remote access:
+
+```bash
+zenml login --local --ip-address 0.0.0.0
+```
+
+<Warning>
+Binding to `0.0.0.0` exposes your server to your network. Only use this in trusted environments.
+</Warning>
+
+## Project Selection
+
+ZenML servers organize resources into projects. After login, you can switch projects:
+
+```bash
+# Set project during login
+zenml login --project my-ml-project
+
+# Or change it afterward
+zenml project set my-ml-project
+
+# List available projects  
+zenml project list
+```
+
+## Verifying Connection
+
+Check your connection status:
+
+```bash
+zenml status
+```
+
+Output:
+```
+ZenML version: 0.55.0
+Store type: rest
+Store URL: https://zenml.example.com
+Active workspace: default
+Active stack: default
+```
+
+## Troubleshooting
+
+### Browser Not Opening
+
+If the web login flow doesn't open your browser:
+
+1. Manually copy the URL from the terminal
+2. Paste it into your browser
+3. Complete authentication
+4. Return to the terminal
+
+### Local Server Won't Start
+
+Common issues:
+
+**Port already in use:**
+```bash
+zenml login --local --port 9000
+```
+
+**Previous server still running:**
+```bash
+zenml login --local --restart
+```
+
+**Docker daemon not running:**
+```bash
+# Start Docker Desktop, then:
+zenml login --local --docker
+```
+
+### Session Expired
+
+If your CLI session expires:
+
+```bash
+zenml login --refresh
+```
+
+Or simply:
+```bash
+zenml login
+```
+
+## CI/CD Usage
+
+For automated pipelines, use API key authentication:
+
+```bash
+# In your CI configuration
+export ZENML_API_KEY="$ZENML_API_KEY_SECRET"
+zenml login https://zenml.example.com --api-key
+```
+
+Example GitHub Actions workflow:
+
+```yaml
+steps:
+  - name: Login to ZenML
+    run: |
+      echo "${{ secrets.ZENML_API_KEY }}" | zenml login ${{ secrets.ZENML_SERVER_URL }} --api-key
+  
+  - name: Run pipeline
+    run: python run_pipeline.py
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Check Status" icon="circle-info">
+    Run `zenml status` to verify your connection
+  </Card>
+  <Card title="Configure Stack" icon="layer-group" href="/cli/stack">
+    Set up your MLOps stack after connecting
+  </Card>
+  <Card title="Manage Projects" icon="folder">
+    Use `zenml project list` to see available projects
+  </Card>
+  <Card title="Run Pipeline" icon="play" href="/cli/pipeline">
+    Execute your first pipeline on the server
+  </Card>
+</CardGroup>

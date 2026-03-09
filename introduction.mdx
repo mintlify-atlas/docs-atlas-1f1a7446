@@ -1,0 +1,261 @@
+---
+title: "Introduction to ZenML"
+description: "One AI Platform From Pipelines to Agents - Build production-ready ML pipelines and AI workflows that run anywhere"
+---
+
+## What is ZenML?
+
+ZenML is an extensible, open-source MLOps framework for creating production-ready machine learning pipelines and AI workflows. Whether you're building classical ML models, LLM applications, or agentic systems, ZenML provides the orchestration layer that lets you focus on your logic while it handles the infrastructure complexity.
+
+<CardGroup cols={2}>
+  <Card title="For ML Engineers" icon="code">
+    Write pipelines in pure Python using familiar tools like scikit-learn, PyTorch, or TensorFlow
+  </Card>
+  <Card title="For LLM Developers" icon="robot">
+    Orchestrate agents and LLM workflows with LangGraph, LangChain, or custom implementations
+  </Card>
+  <Card title="For Data Scientists" icon="chart-line">
+    Track experiments, compare models, and deploy to production with reproducibility built-in
+  </Card>
+  <Card title="For Platform Teams" icon="server">
+    Deploy on Kubernetes, AWS, GCP, Azure, or any infrastructure with pluggable stack components
+  </Card>
+</CardGroup>
+
+## Why ZenML?
+
+At its core, ZenML allows you to write **workflows (pipelines)** that run on any **infrastructure backend (stacks)**. You can embed any Pythonic logic within these pipelines, like training a model or running an agentic loop. ZenML then operationalizes your application by:
+
+<Steps>
+  <Step title="Automatic Containerization">
+    Your code is automatically containerized and versioned, ensuring reproducibility across environments without manual Docker configuration.
+  </Step>
+  
+  <Step title="Comprehensive Tracking">
+    Every pipeline run is tracked with metrics, logs, artifacts, and metadata. Compare experiments, debug failures, and audit model lineage effortlessly.
+  </Step>
+  
+  <Step title="Infrastructure Abstraction">
+    Switch between local execution, Kubernetes, cloud platforms (AWS SageMaker, GCP Vertex AI, Azure ML), or custom orchestrators without rewriting code.
+  </Step>
+  
+  <Step title="Tool Integration">
+    Integrate your existing stack: MLflow for experiment tracking, Weights & Biases for visualization, Langfuse for LLM observability, and 60+ other integrations.
+  </Step>
+  
+  <Step title="Production-Ready Deployments">
+    Deploy pipelines as scheduled jobs, API endpoints, or event-driven workflows with built-in monitoring and versioning.
+  </Step>
+</Steps>
+
+## How ZenML Works
+
+ZenML uses a client-server architecture where your code (the client) communicates with a ZenML server that manages metadata, artifacts, and orchestration:
+
+```python
+from zenml import pipeline, step
+
+@step
+def load_data() -> dict:
+    """Load and return training data."""
+    return {"features": [...], "labels": [...]}
+
+@step
+def train_model(data: dict) -> str:
+    """Train model and return model ID."""
+    # Your training logic here
+    return "model_v1"
+
+@pipeline
+def training_pipeline():
+    """Complete ML training pipeline."""
+    data = load_data()
+    model = train_model(data)
+    return model
+
+# Run locally
+training_pipeline()
+
+# Or deploy to production
+# zenml pipeline deploy training_pipeline --stack=production
+```
+
+<Note>
+ZenML tracks every step execution, including inputs, outputs, parameters, and artifacts. This creates a complete lineage graph from raw data to deployed models.
+</Note>
+
+## Core Concepts
+
+### Pipelines
+
+Pipelines are directed acyclic graphs (DAGs) of steps that define your ML workflow. They're decorated Python functions that compose multiple steps:
+
+```python
+@pipeline(enable_cache=True)
+def ml_pipeline(learning_rate: float = 0.001):
+    """Pipeline with caching and parameters."""
+    data = load_data()
+    model = train_model(data, lr=learning_rate)
+    metrics = evaluate_model(model, data)
+    return metrics
+```
+
+### Steps
+
+Steps are individual Python functions that represent discrete operations in your pipeline. They can take inputs, produce outputs, and access context:
+
+```python
+from zenml import step, get_step_context
+
+@step
+def preprocess_data(raw_data: dict) -> dict:
+    """Preprocess data with automatic artifact tracking."""
+    context = get_step_context()
+    print(f"Running in pipeline: {context.pipeline_name}")
+    # Your preprocessing logic
+    return processed_data
+```
+
+### Artifacts
+
+Artifacts are the data objects passed between steps. ZenML automatically serializes, stores, and versions them:
+
+```python
+from zenml import step, ArtifactConfig
+from typing import Annotated
+import pandas as pd
+
+@step
+def create_dataset() -> Annotated[
+    pd.DataFrame, 
+    ArtifactConfig(name="training_data", tags=["v1", "production"])
+]:
+    """Return dataset with custom artifact configuration."""
+    return pd.DataFrame({...})
+```
+
+### Stacks
+
+Stacks are combinations of infrastructure components (orchestrator, artifact store, container registry, etc.) that define where and how your pipelines run:
+
+```bash
+# Local development stack
+zenml stack register local \
+  --orchestrator=local \
+  --artifact-store=local
+
+# Production Kubernetes stack  
+zenml stack register production \
+  --orchestrator=kubernetes \
+  --artifact-store=s3 \
+  --container-registry=ecr
+
+zenml stack set production
+```
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Classical ML Pipelines" icon="brain">
+    Train, evaluate, and deploy traditional ML models with scikit-learn, XGBoost, or LightGBM with full experiment tracking.
+  </Card>
+  
+  <Card title="Deep Learning Workflows" icon="network-wired">
+    Build PyTorch or TensorFlow training pipelines with distributed training, hyperparameter tuning, and GPU orchestration.
+  </Card>
+  
+  <Card title="LLM Applications" icon="message-bot">
+    Orchestrate RAG pipelines, prompt engineering workflows, and LLM evaluation with Langfuse or MLflow integration.
+  </Card>
+  
+  <Card title="AI Agents" icon="robot">
+    Manage agentic workflows with LangGraph, CrewAI, or custom implementations with full observability and deployment capabilities.
+  </Card>
+  
+  <Card title="Computer Vision" icon="camera">
+    Build image processing pipelines, model training, and inference services for object detection, segmentation, or classification.
+  </Card>
+  
+  <Card title="NLP & Text Processing" icon="language">
+    Create text classification, named entity recognition, or document analysis pipelines with model versioning and A/B testing.
+  </Card>
+</CardGroup>
+
+## Production-Ready Features
+
+### Reproducibility
+Every pipeline run captures the complete environment: code version, dependencies, data snapshots, and configuration. Reproduce any experiment or debug production issues with confidence.
+
+### Caching
+Intelligent caching prevents redundant computation. If inputs and code haven't changed, ZenML reuses previous outputs:
+
+```python
+@pipeline(enable_cache=True)  # Cache entire pipeline
+def my_pipeline():
+    data = expensive_preprocessing()  # Cached if inputs unchanged
+    model = train_model(data)  # Only runs if data changed
+```
+
+### Scheduling
+Schedule pipelines to run on cron expressions or trigger them via webhooks:
+
+```bash
+zenml pipeline schedule training_pipeline \
+  --cron="0 2 * * *"  # Run daily at 2 AM
+```
+
+### Model Registry
+Version and manage models across their lifecycle with the built-in model registry:
+
+```python
+from zenml import Model, step
+
+@step(model=Model(name="customer_churn", version="v1.2.3"))
+def train_model() -> str:
+    """Train and automatically register model."""
+    # Training logic
+    return model_id
+```
+
+<Warning>
+ZenML is designed for production use, but proper testing in staging environments is essential before deploying critical workflows. Always validate pipeline changes in non-production stacks first.
+</Warning>
+
+## Who Uses ZenML?
+
+ZenML is used by thousands of companies worldwide, from startups to Fortune 500 enterprises:
+
+- **Airbus**: Building ML models for aerospace applications
+- **AXA**: Insurance risk modeling and fraud detection  
+- **JetBrains**: ML-powered developer tools
+- **Rivian**: Autonomous vehicle AI systems
+- **WiseTech Global**: Supply chain optimization
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Install ZenML and set up your first environment
+  </Card>
+  
+  <Card title="Quickstart" icon="rocket" href="/getting-started/quickstart">
+    Build and run your first pipeline in 5 minutes
+  </Card>
+  
+  <Card title="Examples" icon="code" href="https://github.com/zenml-io/zenml/tree/main/examples">
+    Explore production-ready example projects
+  </Card>
+  
+  <Card title="Documentation" icon="book" href="https://docs.zenml.io">
+    Dive deep into ZenML's capabilities
+  </Card>
+</CardGroup>
+
+## Community & Support
+
+- **Slack**: Join 4,000+ ML engineers at [zenml.io/slack](https://zenml.io/slack)
+- **GitHub**: Star and contribute at [github.com/zenml-io/zenml](https://github.com/zenml-io/zenml)
+- **Docs**: Complete documentation at [docs.zenml.io](https://docs.zenml.io)
+- **Blog**: Best practices and case studies at [zenml.io/blog](https://zenml.io/blog)
+
+Ready to build production ML pipelines? Let's get started with [installation](/getting-started/installation).

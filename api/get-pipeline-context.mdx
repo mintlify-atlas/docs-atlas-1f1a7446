@@ -1,0 +1,248 @@
+---
+title: "get_pipeline_context"
+description: "Access pipeline configuration during pipeline definition"
+icon: "brackets-curly"
+---
+
+The `get_pipeline_context()` function provides access to the pipeline configuration during pipeline definition (design time), not during pipeline execution.
+
+## Signature
+
+```python
+def get_pipeline_context() -> PipelineContext
+```
+
+## Returns
+
+<ResponseField name="context" type="PipelineContext">
+  A context object containing pipeline configuration information.
+</ResponseField>
+
+## PipelineContext Properties
+
+<ResponseField name="name" type="str">
+  The name of the pipeline.
+</ResponseField>
+
+<ResponseField name="enable_cache" type="Optional[bool]">
+  Whether caching is enabled for the pipeline.
+</ResponseField>
+
+<ResponseField name="enable_artifact_metadata" type="Optional[bool]">
+  Whether artifact metadata extraction is enabled.
+</ResponseField>
+
+<ResponseField name="enable_artifact_visualization" type="Optional[bool]">
+  Whether artifact visualization is enabled.
+</ResponseField>
+
+<ResponseField name="enable_step_logs" type="Optional[bool]">
+  Whether step logs are enabled.
+</ResponseField>
+
+<ResponseField name="enable_pipeline_logs" type="Optional[bool]">
+  Whether pipeline logs are enabled.
+</ResponseField>
+
+<ResponseField name="settings" type="Dict[str, SettingsOrDict]">
+  Stack component settings for the pipeline.
+</ResponseField>
+
+<ResponseField name="extra" type="Dict[str, Any]">
+  Extra configurations passed to the pipeline.
+</ResponseField>
+
+<ResponseField name="model" type="Optional[Model]">
+  The model configuration for this pipeline.
+</ResponseField>
+
+## Examples
+
+### Access Pipeline Name
+
+```python
+from zenml import pipeline, step, get_pipeline_context
+
+@step
+def logging_step() -> None:
+    pass
+
+@pipeline(name="my_training_pipeline")
+def training_pipeline():
+    context = get_pipeline_context()
+    print(f"Pipeline name: {context.name}")
+    logging_step()
+```
+
+### Use Extra Configuration
+
+```python
+from zenml import pipeline, step, get_pipeline_context
+
+@step
+def process_model(model_config: tuple) -> None:
+    module, class_name = model_config
+    print(f"Processing {class_name} from {module}")
+
+@pipeline(
+    extra={
+        "models": [
+            ("sklearn.tree", "DecisionTreeClassifier"),
+            ("sklearn.ensemble", "RandomForestClassifier"),
+            ("sklearn.svm", "SVC"),
+        ]
+    }
+)
+def model_search_pipeline():
+    context = get_pipeline_context()
+    
+    # Dynamically create steps based on configuration
+    for model_config in context.extra["models"]:
+        process_model(model_config=model_config)
+```
+
+### Conditional Step Execution
+
+```python
+from zenml import pipeline, step, get_pipeline_context
+
+@step
+def train_model() -> None:
+    print("Training model...")
+
+@step
+def evaluate_model() -> None:
+    print("Evaluating model...")
+
+@step
+def use_cached_model() -> None:
+    print("Using cached model...")
+
+@pipeline(extra={"use_cache": True})
+def conditional_pipeline():
+    context = get_pipeline_context()
+    
+    if context.extra.get("use_cache"):
+        use_cached_model()
+    else:
+        train_model()
+        evaluate_model()
+```
+
+### Dynamic Step Configuration
+
+```python
+from zenml import pipeline, step, get_pipeline_context
+
+@step
+def data_processor(config: dict) -> None:
+    print(f"Processing with config: {config}")
+
+@pipeline(
+    extra={
+        "n_splits": 5,
+        "preprocessing_steps": [
+            {"name": "normalize", "params": {"method": "minmax"}},
+            {"name": "encode", "params": {"method": "onehot"}},
+            {"name": "impute", "params": {"strategy": "mean"}},
+        ]
+    }
+)
+def preprocessing_pipeline():
+    context = get_pipeline_context()
+    
+    for step_config in context.extra["preprocessing_steps"]:
+        data_processor(config=step_config)
+```
+
+### Access Model Configuration
+
+```python
+from zenml import pipeline, step, get_pipeline_context, Model
+
+@step
+def train_step() -> None:
+    pass
+
+@pipeline(
+    model=Model(
+        name="iris_classifier",
+        version="1.0.0",
+        tags=["classification"]
+    )
+)
+def model_training_pipeline():
+    context = get_pipeline_context()
+    
+    if context.model:
+        print(f"Training model: {context.model.name}")
+        print(f"Version: {context.model.version}")
+    
+    train_step()
+```
+
+### Check Pipeline Settings
+
+```python
+from zenml import pipeline, step, get_pipeline_context
+
+@step
+def data_step() -> None:
+    pass
+
+@pipeline(enable_cache=False)
+def no_cache_pipeline():
+    context = get_pipeline_context()
+    
+    if not context.enable_cache:
+        print("Cache is disabled for this pipeline")
+    
+    data_step()
+```
+
+## Important Notes
+
+- `get_pipeline_context()` is only available **during pipeline definition** (when the pipeline function is being called to define the DAG)
+- It is **not available during pipeline execution** (when steps are actually running)
+- For runtime information during step execution, use `get_step_context()` instead
+- Raises `RuntimeError` if called outside a pipeline definition or inside a running step
+
+## Common Errors
+
+### Called Outside Pipeline
+
+```python
+# This will raise RuntimeError
+from zenml import get_pipeline_context
+
+context = get_pipeline_context()  # Error: No active pipeline found
+```
+
+### Called Inside Running Step
+
+```python
+from zenml import pipeline, step, get_pipeline_context
+
+@step
+def my_step() -> None:
+    # This will raise RuntimeError during execution
+    context = get_pipeline_context()  # Error: Use get_step_context instead
+
+@pipeline
+def my_pipeline():
+    my_step()
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@pipeline" href="./pipeline" icon="code">
+    Learn about creating pipelines
+  </Card>
+  <Card title="get_step_context" href="./get-step-context" icon="brackets-curly">
+    Access step runtime context
+  </Card>
+  <Card title="Model" href="./model" icon="cube">
+    Configure models
+  </Card>
+</CardGroup>

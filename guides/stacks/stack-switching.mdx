@@ -1,0 +1,577 @@
+---
+title: Stack Switching
+description: Switch between different ZenML stacks for various environments and use cases
+---
+
+Stack switching allows you to seamlessly move between different infrastructure configurations. This is essential for modern ML workflows where you develop locally, test in staging, and deploy to production.
+
+## Why Switch Stacks?
+
+Different stages of your ML workflow need different infrastructure:
+
+- **Local development**: Fast iteration with local orchestrator
+- **Experimentation**: Cloud resources with experiment tracking
+- **Staging**: Production-like environment for testing
+- **Production**: Robust, scalable infrastructure
+
+## Basic Stack Switching
+
+<Steps>
+
+### Step 1: List Available Stacks
+
+See all stacks you have access to:
+
+```bash
+zenml stack list
+```
+
+Output shows:
+- Stack names
+- Active stack (marked with *)
+- Stack components
+- Shared status
+
+### Step 2: View Stack Details
+
+Before switching, review stack configuration:
+
+```bash
+zenml stack describe target_stack
+```
+
+### Step 3: Switch Stack
+
+Activate a different stack:
+
+```bash
+zenml stack set production_stack
+```
+
+### Step 4: Verify Active Stack
+
+Confirm the switch was successful:
+
+```bash
+zenml stack describe
+```
+
+</Steps>
+
+## Common Switching Patterns
+
+### Development to Production
+
+Switch from local development to production:
+
+```bash
+# Working locally
+zenml stack set dev_stack
+python train_pipeline.py  # Develop and test
+
+# Ready for production
+zenml stack set prod_stack
+python train_pipeline.py  # Run in production
+```
+
+### Quick Environment Switch
+
+Switch between environments rapidly:
+
+```bash
+# Development
+zenml stack set dev
+
+# Test in staging
+zenml stack set staging  
+
+# Deploy to production
+zenml stack set prod
+```
+
+### Feature Branch Workflow
+
+Use different stacks for different branches:
+
+```bash
+# Working on feature branch
+git checkout feature/new-model
+zenml stack set experiment_stack
+
+# Back to main branch
+git checkout main
+zenml stack set production_stack
+```
+
+## Programmatic Stack Switching
+
+### Using the Client
+
+Switch stacks in Python code:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get current stack
+current_stack = client.active_stack
+print(f"Current: {current_stack.name}")
+
+# Switch to a different stack
+client.activate_stack("production_stack")
+print(f"Switched to: {client.active_stack.name}")
+```
+
+### Context-Based Switching
+
+Temporarily switch stacks for specific operations:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Save current stack
+original_stack = client.active_stack.name
+
+try:
+    # Switch to production for deployment
+    client.activate_stack("production_stack")
+    
+    # Run production pipeline
+    from pipelines import production_pipeline
+    production_pipeline()
+    
+finally:
+    # Switch back to original stack
+    client.activate_stack(original_stack)
+    print(f"Restored stack: {original_stack}")
+```
+
+### Environment-Aware Stack Selection
+
+Automatically select stack based on environment:
+
+```python
+import os
+from zenml.client import Client
+
+def get_stack_for_environment() -> str:
+    """Select stack based on environment variable."""
+    env = os.getenv("ENVIRONMENT", "development")
+    
+    stack_mapping = {
+        "development": "dev_stack",
+        "staging": "staging_stack",
+        "production": "prod_stack",
+    }
+    
+    return stack_mapping.get(env, "dev_stack")
+
+def main():
+    client = Client()
+    
+    # Select and activate appropriate stack
+    stack_name = get_stack_for_environment()
+    client.activate_stack(stack_name)
+    
+    print(f"Running with stack: {stack_name}")
+    
+    # Run your pipeline
+    from pipelines import ml_pipeline
+    ml_pipeline()
+
+if __name__ == "__main__":
+    main()
+```
+
+## Stack Switching Strategies
+
+### By Team Member Role
+
+Different team members use different stacks:
+
+```bash
+# Data scientists use experiment stack
+zenml stack set experiment_stack  # Local + MLflow
+
+# ML engineers use staging stack  
+zenml stack set staging_stack     # Kubernetes + S3
+
+# SRE/DevOps use production stack
+zenml stack set production_stack  # Kubernetes + S3 + Monitoring
+```
+
+### By Pipeline Type
+
+Switch based on pipeline purpose:
+
+```bash
+# Data processing pipelines
+zenml stack set data_processing_stack  # Spark + S3
+
+# Training pipelines
+zenml stack set training_stack         # GPU + MLflow
+
+# Inference pipelines
+zenml stack set inference_stack        # Kubernetes + Model deployer
+```
+
+### By Resource Requirements
+
+Switch based on computational needs:
+
+```bash
+# Light experiments
+zenml stack set local_stack
+
+# Heavy training
+zenml stack set gpu_stack
+
+# Large-scale batch processing
+zenml stack set distributed_stack
+```
+
+## Pipeline-Specific Stack Configuration
+
+Run specific pipelines with specific stacks:
+
+```python
+from zenml import pipeline, step
+from zenml.client import Client
+
+@step
+def train_model() -> object:
+    """Train a model."""
+    return {"model": "trained"}
+
+@pipeline
+def training_pipeline():
+    """Training pipeline."""
+    model = train_model()
+    return model
+
+def run_on_specific_stack(pipeline_fn, stack_name: str):
+    """Execute pipeline on a specific stack."""
+    client = Client()
+    original_stack = client.active_stack.name
+    
+    try:
+        # Switch to target stack
+        client.activate_stack(stack_name)
+        print(f"Running on stack: {stack_name}")
+        
+        # Execute pipeline
+        pipeline_fn()
+        
+    finally:
+        # Restore original stack
+        client.activate_stack(original_stack)
+        print(f"Restored stack: {original_stack}")
+
+# Usage
+if __name__ == "__main__":
+    run_on_specific_stack(training_pipeline, "gpu_stack")
+```
+
+## Multi-Stack Workflows
+
+### Cross-Stack Artifact Sharing
+
+Share artifacts between stacks:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Train on GPU stack
+client.activate_stack("gpu_training_stack")
+from pipelines import training_pipeline
+run = training_pipeline()
+
+# Get the trained model artifact
+model_artifact = run.steps["train_model"].output
+
+# Switch to inference stack
+client.activate_stack("inference_stack")
+
+# Deploy the model from training run
+from pipelines import deployment_pipeline
+deployment_pipeline(model_artifact_id=model_artifact.id)
+```
+
+### Parallel Execution on Multiple Stacks
+
+Run experiments on different stacks simultaneously:
+
+```python
+import concurrent.futures
+from zenml.client import Client
+
+def run_experiment(stack_name: str, params: dict) -> str:
+    """Run experiment on specific stack."""
+    client = Client()
+    client.activate_stack(stack_name)
+    
+    from pipelines import experiment_pipeline
+    run = experiment_pipeline(**params)
+    
+    return f"Completed on {stack_name}: {run.id}"
+
+def parallel_experiments():
+    """Run experiments in parallel on different stacks."""
+    experiments = [
+        ("experiment_stack_1", {"learning_rate": 0.001}),
+        ("experiment_stack_2", {"learning_rate": 0.01}),
+        ("experiment_stack_3", {"learning_rate": 0.1}),
+    ]
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [
+            executor.submit(run_experiment, stack, params)
+            for stack, params in experiments
+        ]
+        
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            print(result)
+
+if __name__ == "__main__":
+    parallel_experiments()
+```
+
+## Stack Compatibility Checks
+
+Verify pipeline compatibility with stack:
+
+```python
+from zenml.client import Client
+
+def check_stack_compatibility(stack_name: str) -> bool:
+    """Check if stack has required components."""
+    client = Client()
+    
+    try:
+        stack = client.get_stack(stack_name)
+        
+        # Check for required components
+        required_components = [
+            "artifact_store",
+            "orchestrator",
+            "experiment_tracker",  # Required for our pipeline
+        ]
+        
+        for component_type in required_components:
+            if not getattr(stack, component_type, None):
+                print(f"Missing required component: {component_type}")
+                return False
+        
+        print(f"Stack {stack_name} is compatible")
+        return True
+        
+    except Exception as e:
+        print(f"Error checking stack: {e}")
+        return False
+
+# Usage
+if check_stack_compatibility("training_stack"):
+    client = Client()
+    client.activate_stack("training_stack")
+    # Run pipeline
+else:
+    print("Please use a different stack")
+```
+
+## Automation Scripts
+
+### Stack Switching Helper Script
+
+Create a helper script for common operations:
+
+```python switch_stack.py
+#!/usr/bin/env python3
+"""Helper script for stack switching."""
+
+import sys
+from zenml.client import Client
+
+def switch_stack(environment: str) -> None:
+    """Switch to environment-specific stack."""
+    client = Client()
+    
+    # Environment to stack mapping
+    stacks = {
+        "dev": "development_stack",
+        "staging": "staging_stack",
+        "prod": "production_stack",
+        "experiment": "experiment_stack",
+    }
+    
+    if environment not in stacks:
+        print(f"Unknown environment: {environment}")
+        print(f"Available: {', '.join(stacks.keys())}")
+        sys.exit(1)
+    
+    stack_name = stacks[environment]
+    
+    try:
+        client.activate_stack(stack_name)
+        print(f"✓ Switched to {environment} stack: {stack_name}")
+        
+        # Display stack info
+        stack = client.active_stack
+        print(f"  Orchestrator: {stack.orchestrator.name}")
+        print(f"  Artifact Store: {stack.artifact_store.name}")
+        
+    except Exception as e:
+        print(f"✗ Failed to switch stack: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python switch_stack.py <environment>")
+        print("Environments: dev, staging, prod, experiment")
+        sys.exit(1)
+    
+    switch_stack(sys.argv[1])
+```
+
+Use the script:
+
+```bash
+python switch_stack.py dev
+python switch_stack.py prod
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Know Your Active Stack" icon="layer-group">
+Always verify which stack is active before running pipelines
+</Card>
+
+<Card title="Use Descriptive Names" icon="tag">
+Name stacks clearly to indicate their purpose and environment
+</Card>
+
+<Card title="Automate Environment Selection" icon="robot">
+Use environment variables to automatically select the right stack
+</Card>
+
+<Card title="Document Stack Requirements" icon="book">
+Document which pipelines work with which stacks
+</Card>
+
+<Card title="Test Before Switching" icon="vial">
+Verify stack configuration before running production pipelines
+</Card>
+
+<Card title="Restore Original Stack" icon="undo">
+Always restore the original stack in error handling
+</Card>
+
+</CardGroup>
+
+## Quick Reference
+
+<CodeGroup>
+
+```bash CLI Commands
+# List all stacks
+zenml stack list
+
+# Show current stack
+zenml stack describe
+
+# Switch stack
+zenml stack set my_stack
+
+# Get stack by name
+zenml stack describe my_stack
+```
+
+```python Python Client
+from zenml.client import Client
+
+client = Client()
+
+# Get active stack
+stack = client.active_stack
+
+# Switch stack
+client.activate_stack("prod_stack")
+
+# List all stacks
+stacks = client.list_stacks()
+```
+
+```python Context Manager
+from zenml.client import Client
+
+client = Client()
+original = client.active_stack.name
+
+try:
+    client.activate_stack("temp_stack")
+    # Do work
+finally:
+    client.activate_stack(original)
+```
+
+</CodeGroup>
+
+## Troubleshooting
+
+### Stack Not Found
+
+```bash
+# List available stacks
+zenml stack list
+
+# Check if connected to right server
+zenml status
+```
+
+### Permission Denied
+
+Some stacks may be private or require specific permissions:
+
+```bash
+# Check stack sharing settings
+zenml stack describe target_stack
+
+# Contact stack owner for access
+```
+
+### Component Unavailable
+
+If a stack component is unavailable:
+
+```bash
+# Verify component configuration
+zenml stack describe problematic_stack
+
+# Test individual components
+zenml artifact-store describe my_artifact_store
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Configuring Stacks" href="/guides/stacks/configuring-stacks" icon="gear">
+Learn how to create and configure custom stacks
+</Card>
+
+<Card title="Creating Pipelines" href="/guides/pipelines/creating-pipelines" icon="diagram-project">
+Build pipelines that work across different stacks
+</Card>
+
+<Card title="Deploying Pipelines" href="/guides/pipelines/deploying-pipelines" icon="rocket">
+Deploy pipelines to production stacks
+</Card>
+
+</CardGroup>

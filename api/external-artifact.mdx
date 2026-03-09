@@ -1,0 +1,229 @@
+---
+title: "ExternalArtifact"
+description: "Use external values as step inputs without writing additional steps"
+icon: "file-import"
+---
+
+The `ExternalArtifact` class allows you to provide values as inputs to ZenML steps without needing to create an additional step that returns those values.
+
+## Signature
+
+```python
+ExternalArtifact(
+    value: Any,
+    materializer: Optional[MaterializerClassOrSource] = None,
+    store_artifact_metadata: bool = True,
+    store_artifact_visualizations: bool = True,
+)
+```
+
+## Parameters
+
+<ParamField path="value" type="Any" required>
+  The artifact value to upload to the artifact store.
+</ParamField>
+
+<ParamField path="materializer" type="MaterializerClassOrSource" optional>
+  The materializer to use for saving the artifact value to the artifact store. Can be a materializer class, a string path to a materializer, or a Source object.
+</ParamField>
+
+<ParamField path="store_artifact_metadata" type="bool" default="True">
+  Whether metadata for the artifact should be extracted and stored.
+</ParamField>
+
+<ParamField path="store_artifact_visualizations" type="bool" default="True">
+  Whether visualizations for the artifact should be generated and stored.
+</ParamField>
+
+## Examples
+
+### Basic External Artifact
+
+```python
+from zenml import step, pipeline, ExternalArtifact
+import numpy as np
+
+@step
+def process_array(data: np.ndarray) -> None:
+    print(f"Processing array with shape {data.shape}")
+    print(data)
+
+my_array = np.array([1, 2, 3, 4, 5])
+
+@pipeline
+def my_pipeline():
+    process_array(data=ExternalArtifact(my_array))
+
+my_pipeline()
+```
+
+### Multiple External Artifacts
+
+```python
+from zenml import step, pipeline, ExternalArtifact
+import pandas as pd
+import numpy as np
+
+@step
+def merge_data(
+    df: pd.DataFrame,
+    coefficients: np.ndarray
+) -> pd.DataFrame:
+    df["scaled"] = df["value"] * coefficients[0]
+    return df
+
+external_df = pd.DataFrame({"value": [1, 2, 3]})
+external_coef = np.array([2.5, 1.0])
+
+@pipeline
+def data_pipeline():
+    result = merge_data(
+        df=ExternalArtifact(external_df),
+        coefficients=ExternalArtifact(external_coef)
+    )
+```
+
+### Custom Materializer
+
+```python
+from zenml import step, pipeline, ExternalArtifact
+from zenml.materializers import BuiltInMaterializer
+import pickle
+
+class CustomObject:
+    def __init__(self, data):
+        self.data = data
+
+@step
+def process_custom(obj: CustomObject) -> None:
+    print(f"Processing: {obj.data}")
+
+custom_obj = CustomObject(data="important_data")
+
+@pipeline
+def custom_pipeline():
+    process_custom(
+        obj=ExternalArtifact(
+            value=custom_obj,
+            materializer=BuiltInMaterializer
+        )
+    )
+```
+
+### Disable Metadata and Visualizations
+
+```python
+from zenml import step, pipeline, ExternalArtifact
+import pandas as pd
+
+@step
+def analyze_data(df: pd.DataFrame) -> dict:
+    return {"mean": df.mean().to_dict()}
+
+large_df = pd.DataFrame({"col": range(1000000)})
+
+@pipeline
+def efficient_pipeline():
+    # Skip metadata extraction for large datasets to improve performance
+    analyze_data(
+        df=ExternalArtifact(
+            value=large_df,
+            store_artifact_metadata=False,
+            store_artifact_visualizations=False
+        )
+    )
+```
+
+### Combining with Regular Step Outputs
+
+```python
+from zenml import step, pipeline, ExternalArtifact
+import numpy as np
+import pandas as pd
+
+@step
+def load_database() -> pd.DataFrame:
+    # Load from database
+    return pd.DataFrame({"id": [1, 2, 3], "value": [10, 20, 30]})
+
+@step
+def combine_data(
+    db_data: pd.DataFrame,
+    external_weights: np.ndarray
+) -> pd.DataFrame:
+    db_data["weighted"] = db_data["value"] * external_weights[0]
+    return db_data
+
+weights = np.array([1.5, 2.0])
+
+@pipeline
+def hybrid_pipeline():
+    db_df = load_database()
+    result = combine_data(
+        db_data=db_df,
+        external_weights=ExternalArtifact(weights)
+    )
+```
+
+### Dynamic Pipeline with External Artifacts
+
+```python
+from zenml import step, pipeline, ExternalArtifact
+import pandas as pd
+
+@step
+def process_chunk(data: pd.DataFrame, chunk_id: int) -> dict:
+    return {"chunk": chunk_id, "size": len(data)}
+
+@pipeline(dynamic=True)
+def dynamic_pipeline(dataframes: list):
+    for i, df in enumerate(dataframes):
+        process_chunk(
+            data=ExternalArtifact(df),
+            chunk_id=i
+        )
+
+# Run with multiple dataframes
+dataframes = [
+    pd.DataFrame({"a": range(100)}),
+    pd.DataFrame({"b": range(200)}),
+    pd.DataFrame({"c": range(150)}),
+]
+
+dynamic_pipeline(dataframes=dataframes)
+```
+
+## Use Cases
+
+**ExternalArtifact is useful when you want to:**
+
+1. **Inject test data** into a pipeline without creating a dedicated data loading step
+2. **Pass configuration objects** or hyperparameters that aren't simple JSON-serializable values
+3. **Reuse existing Python objects** from your notebook or script as pipeline inputs
+4. **Provide baseline data** for comparison in ML experiments
+5. **Supply pre-computed features** from an external source
+
+## Important Notes
+
+- External artifacts are uploaded to the artifact store before the pipeline runs
+- Each external artifact is assigned a unique name in the format `external_{uuid}`
+- The value is uploaded only once; subsequent references use the uploaded artifact ID
+- External artifacts support the same materializers as regular step outputs
+- They can be visualized and have metadata extracted just like normal artifacts
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@step" href="./step" icon="code">
+    Learn about creating steps
+  </Card>
+  <Card title="ArtifactConfig" href="./artifact-config" icon="box">
+    Configure step outputs
+  </Card>
+  <Card title="save_artifact" href="./save-artifact" icon="floppy-disk">
+    Manually save artifacts
+  </Card>
+  <Card title="load_artifact" href="./load-artifact" icon="download">
+    Load saved artifacts
+  </Card>
+</CardGroup>

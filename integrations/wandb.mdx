@@ -1,0 +1,513 @@
+---
+title: Weights & Biases Integration
+description: Track experiments with Weights & Biases (W&B)
+---
+
+The Weights & Biases integration provides cloud-based experiment tracking with rich visualization, collaboration features, and hyperparameter optimization.
+
+## Installation
+
+```bash
+pip install "zenml[wandb]"
+```
+
+This installs:
+- `wandb>=0.12.12,<1.0.0` - W&B SDK
+- `weave>=0.51.33,<1.0.0` - W&B Weave for ML observability
+- `Pillow>=9.1.0` - Image processing for visualizations
+
+## Available Components
+
+<Card title="W&B Experiment Tracker" icon="chart-line">
+  Track experiments, metrics, and artifacts with Weights & Biases
+</Card>
+
+## W&B Experiment Tracker
+
+Track experiments and log metrics, parameters, and artifacts to Weights & Biases.
+
+### Configuration
+
+**With API Key:**
+
+```bash
+zenml experiment-tracker register wandb-tracker \
+    --flavor=wandb \
+    --entity=my-wandb-team \
+    --project_name=zenml-experiments \
+    --api_key=your-wandb-api-key
+```
+
+**Using Environment Variable:**
+
+```bash
+# Set API key in environment
+export WANDB_API_KEY=your-wandb-api-key
+
+# Register without explicit key
+zenml experiment-tracker register wandb-tracker \
+    --flavor=wandb \
+    --entity=my-wandb-team \
+    --project_name=zenml-experiments
+```
+
+**Using W&B CLI Login:**
+
+```bash
+# Login via CLI
+wandb login
+
+# Register tracker
+zenml experiment-tracker register wandb-tracker \
+    --flavor=wandb \
+    --entity=my-wandb-team \
+    --project_name=zenml-experiments
+```
+
+**Configuration Parameters:**
+- `entity` - W&B team/username (optional, defaults to default entity)
+- `project_name` - W&B project name (optional, defaults to "zenml-runs")
+- `api_key` - W&B API key (optional if set in environment)
+
+### Getting Your API Key
+
+1. Go to [W&B Settings](https://wandb.ai/settings)
+2. Find "API keys" section
+3. Copy your API key
+4. Use it in configuration or set as `WANDB_API_KEY`
+
+### Usage in Steps
+
+**Basic Logging:**
+
+```python
+from zenml import step, pipeline
+import wandb
+
+@step(experiment_tracker="wandb-tracker")
+def train_model(data: pd.DataFrame) -> Model:
+    # Initialize run (automatically done by ZenML)
+    config = {
+        "learning_rate": 0.001,
+        "epochs": 10,
+        "batch_size": 32,
+    }
+    wandb.config.update(config)
+    
+    # Training loop
+    for epoch in range(10):
+        train_loss = train_epoch(model, data)
+        val_loss = validate(model, val_data)
+        
+        # Log metrics
+        wandb.log({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        })
+    
+    return model
+```
+
+**Using ZenML Experiment Tracker Interface:**
+
+```python
+from zenml import step
+from zenml.client import Client
+
+experiment_tracker = Client().active_stack.experiment_tracker
+
+@step(experiment_tracker="wandb-tracker")
+def train_model() -> Model:
+    # Log parameters
+    experiment_tracker.log_params({
+        "learning_rate": 0.001,
+        "n_estimators": 100,
+    })
+    
+    # Log metrics
+    for epoch in range(100):
+        loss = train_epoch()
+        experiment_tracker.log_metrics(
+            {"loss": loss, "epoch": epoch},
+            step=epoch
+        )
+    
+    return model
+```
+
+### Advanced Logging
+
+**Log Images:**
+
+```python
+import wandb
+import matplotlib.pyplot as plt
+
+@step(experiment_tracker="wandb-tracker")
+def visualize_results(predictions: np.ndarray) -> None:
+    # Log matplotlib figure
+    fig, ax = plt.subplots()
+    ax.plot(predictions)
+    wandb.log({"predictions_plot": wandb.Image(fig)})
+    plt.close()
+    
+    # Log PIL image
+    from PIL import Image
+    img = Image.open("output.png")
+    wandb.log({"output_image": wandb.Image(img)})
+    
+    # Log image from array
+    wandb.log({"heatmap": wandb.Image(array_data)})
+```
+
+**Log Tables:**
+
+```python
+import wandb
+
+@step(experiment_tracker="wandb-tracker")
+def log_evaluation_results(predictions: pd.DataFrame) -> None:
+    # Create W&B table
+    table = wandb.Table(dataframe=predictions)
+    wandb.log({"predictions_table": table})
+    
+    # Or create manually
+    table = wandb.Table(
+        columns=["input", "prediction", "label"],
+        data=[[1.0, 0.9, 1], [2.0, 0.1, 0]]
+    )
+    wandb.log({"results": table})
+```
+
+**Log Artifacts:**
+
+```python
+import wandb
+
+@step(experiment_tracker="wandb-tracker")
+def save_model(model: Model) -> None:
+    # Save model locally first
+    model.save("model.pkl")
+    
+    # Log as artifact
+    artifact = wandb.Artifact("model", type="model")
+    artifact.add_file("model.pkl")
+    wandb.log_artifact(artifact)
+    
+    # Or log directory
+    artifact = wandb.Artifact("training-data", type="dataset")
+    artifact.add_dir("data/")
+    wandb.log_artifact(artifact)
+```
+
+**Log Histograms:**
+
+```python
+import wandb
+import numpy as np
+
+@step(experiment_tracker="wandb-tracker")
+def log_distributions(data: np.ndarray) -> None:
+    wandb.log({"distribution": wandb.Histogram(data)})
+```
+
+**Log Confusion Matrix:**
+
+```python
+import wandb
+from sklearn.metrics import confusion_matrix
+
+@step(experiment_tracker="wandb-tracker")
+def evaluate_model(y_true: np.ndarray, y_pred: np.ndarray) -> None:
+    cm = confusion_matrix(y_true, y_pred)
+    wandb.log({
+        "confusion_matrix": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=y_true,
+            preds=y_pred,
+            class_names=["Class 0", "Class 1"],
+        )
+    })
+```
+
+### Run Configuration
+
+**Custom Run Names and Tags:**
+
+```python
+import wandb
+
+@step(experiment_tracker="wandb-tracker")
+def train_model() -> Model:
+    # Set run name and tags
+    wandb.run.name = "experiment-v2-lr-0.001"
+    wandb.run.tags = ["baseline", "v2", "production"]
+    wandb.run.notes = "Testing new architecture with reduced learning rate"
+    
+    # Training code
+    ...
+```
+
+**Group Runs:**
+
+```python
+import wandb
+
+@step(experiment_tracker="wandb-tracker")
+def hyperparameter_search() -> None:
+    # Group related runs
+    for lr in [0.001, 0.01, 0.1]:
+        with wandb.init(
+            project="zenml-experiments",
+            group="lr-search",
+            job_type="train",
+        ):
+            wandb.config.update({"learning_rate": lr})
+            train_and_log(lr)
+```
+
+### Framework Integration
+
+**PyTorch:**
+
+```python
+import wandb
+import torch
+
+@step(experiment_tracker="wandb-tracker")
+def train_pytorch_model() -> None:
+    # Watch model gradients and parameters
+    model = MyModel()
+    wandb.watch(model, log="all", log_freq=100)
+    
+    for epoch in range(epochs):
+        loss = train_epoch(model)
+        wandb.log({"loss": loss})
+```
+
+**TensorFlow/Keras:**
+
+```python
+import wandb
+from wandb.keras import WandbCallback
+
+@step(experiment_tracker="wandb-tracker")
+def train_keras_model() -> None:
+    model = build_model()
+    
+    # Use W&B callback
+    model.fit(
+        X_train, y_train,
+        validation_data=(X_val, y_val),
+        callbacks=[WandbCallback()],
+    )
+```
+
+**Scikit-learn:**
+
+```python
+import wandb
+from sklearn.ensemble import RandomForestClassifier
+
+@step(experiment_tracker="wandb-tracker")
+def train_sklearn_model() -> None:
+    model = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=5,
+    )
+    
+    # Log hyperparameters
+    wandb.config.update(model.get_params())
+    
+    model.fit(X_train, y_train)
+    
+    # Log metrics
+    train_score = model.score(X_train, y_train)
+    val_score = model.score(X_val, y_val)
+    
+    wandb.log({
+        "train_accuracy": train_score,
+        "val_accuracy": val_score,
+    })
+```
+
+## Complete Stack Example
+
+```bash
+# Register experiment tracker
+zenml experiment-tracker register wandb-prod \
+    --flavor=wandb \
+    --entity=my-ml-team \
+    --project_name=production-models \
+    --api_key=your-wandb-api-key
+
+# Create stack
+zenml stack register wandb-stack \
+    -o local \
+    -a local \
+    -e wandb-prod
+
+# Activate
+zenml stack set wandb-stack
+```
+
+## W&B Features
+
+### Sweeps (Hyperparameter Optimization)
+
+```python
+import wandb
+from zenml import step
+
+@step(experiment_tracker="wandb-tracker")
+def hyperparameter_sweep() -> None:
+    # Define sweep configuration
+    sweep_config = {
+        "method": "bayes",
+        "metric": {"name": "val_accuracy", "goal": "maximize"},
+        "parameters": {
+            "learning_rate": {"min": 0.0001, "max": 0.1},
+            "batch_size": {"values": [16, 32, 64]},
+            "epochs": {"value": 10},
+        },
+    }
+    
+    sweep_id = wandb.sweep(sweep_config, project="zenml-experiments")
+    wandb.agent(sweep_id, function=train_function, count=20)
+```
+
+### Reports
+
+Create shareable reports in W&B UI:
+1. Go to your project page
+2. Click "Create Report"
+3. Add charts, tables, and markdown
+4. Share with team or make public
+
+### Workspaces
+
+Organize experiments in workspaces:
+- Filter runs by tags, parameters, or metrics
+- Create custom charts and visualizations
+- Compare multiple runs side-by-side
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Tags for Organization">
+    Tag runs for easy filtering:
+    
+    ```python
+    wandb.run.tags = [
+        "baseline",
+        "v2",
+        "production",
+        "high-priority",
+    ]
+    ```
+  </Accordion>
+
+  <Accordion title="Log System Metrics">
+    Enable system monitoring:
+    
+    ```python
+    wandb.init(monitor_gym=True)  # GPU, CPU, memory
+    ```
+  </Accordion>
+
+  <Accordion title="Use Artifacts for Reproducibility">
+    Version datasets and models:
+    
+    ```python
+    # Log dataset
+    dataset_artifact = wandb.Artifact("training-data", type="dataset")
+    dataset_artifact.add_file("data.csv")
+    wandb.log_artifact(dataset_artifact)
+    
+    # Use in another run
+    artifact = wandb.use_artifact("training-data:latest")
+    data_path = artifact.file()
+    ```
+  </Accordion>
+
+  <Accordion title="Group Related Runs">
+    Use groups for hyperparameter searches:
+    
+    ```python
+    wandb.init(
+        group="lr-search-2024-01",
+        job_type="train",
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## W&B vs MLflow
+
+| Feature | W&B | MLflow |
+|---------|-----|--------|
+| Hosting | Cloud-based | Self-hosted or cloud |
+| UI | Rich, modern | Functional |
+| Collaboration | Built-in | Limited |
+| Hyperparameter search | Built-in sweeps | External tools |
+| Artifacts | Native support | Basic support |
+| Cost | Free tier + paid | Free (self-hosted) |
+| Setup complexity | Minimal | Moderate |
+| Offline mode | Limited | Full support |
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Login Required">
+    If you see login errors:
+    
+    1. Set API key: `export WANDB_API_KEY=your-key`
+    2. Or login: `wandb login`
+    3. Or pass in configuration: `api_key=your-key`
+  </Accordion>
+
+  <Accordion title="Offline Mode">
+    To work without internet:
+    
+    ```bash
+    export WANDB_MODE=offline
+    # Run pipeline
+    # Sync later:
+    wandb sync wandb/offline-run-*
+    ```
+  </Accordion>
+
+  <Accordion title="Rate Limiting">
+    If you hit rate limits:
+    
+    1. Reduce logging frequency
+    2. Batch log calls together
+    3. Contact W&B for higher limits
+  </Accordion>
+
+  <Accordion title="Large Artifacts">
+    For large files:
+    
+    1. Use artifact references instead of uploads
+    2. Compress data before logging
+    3. Use external storage with references
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MLflow Integration" href="./mlflow">
+    Compare with MLflow tracking
+  </Card>
+  <Card title="Experiment Tracking" href="../stack-components/experiment-trackers">
+    Learn more about experiment tracking
+  </Card>
+  <Card title="Vertex AI Integration" href="./vertex-ai">
+    Combine with GCP Vertex Experiments
+  </Card>
+  <Card title="W&B Docs" href="https://docs.wandb.ai/">
+    Official Weights & Biases documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,257 @@
+---
+title: zenml init
+description: Initialize a ZenML repository in your project directory.
+---
+
+The `zenml init` command initializes a ZenML repository in your current directory, setting up the necessary configuration and resource management tools.
+
+## Basic Usage
+
+```bash
+zenml init
+```
+
+This creates a hidden `.zen` folder in your current directory containing ZenML configuration and metadata.
+
+## Command Options
+
+### Custom Path
+
+Initialize ZenML in a specific directory:
+
+```bash
+zenml init --path /path/to/dir
+```
+
+### Using Project Templates
+
+Bootstrap your project with a ready-to-use template:
+
+```bash
+zenml init --template <template_name>
+```
+
+Available templates:
+- `starter` - Basic ZenML project structure
+- `e2e_batch` - End-to-end batch inference pipeline
+- `nlp` - Natural language processing template
+- `llm_finetuning` - LLM fine-tuning template
+
+#### Template with Defaults
+
+Skip interactive prompts and use default values:
+
+```bash
+zenml init --template starter --template-with-defaults
+```
+
+### Custom Template URL
+
+Use a custom Copier template from GitHub:
+
+```bash
+zenml init --template gh:your-org/your-template
+```
+
+#### Specify Template Version
+
+Use a specific version tag:
+
+```bash
+zenml init --template gh:your-org/your-template --template-tag v1.0.0
+```
+
+## Complete Option Reference
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--path` | Path | Directory path where ZenML should be initialized (defaults to current directory) |
+| `--template` | String | Name or URL of a ZenML project template (e.g., `starter`, `e2e_batch`, or `gh:owner/repo`) |
+| `--template-tag` | String | Optional version tag for custom template URLs (ignored for built-in templates) |
+| `--template-with-defaults` | Flag | Use template default values without interactive prompts |
+
+## Examples
+
+### Initialize in Current Directory
+
+```bash
+cd my-ml-project
+zenml init
+```
+
+Output:
+```
+ZenML repository initialized at /Users/username/my-ml-project
+```
+
+### Initialize with Starter Template
+
+```bash
+zenml init --template starter
+```
+
+You'll be prompted for:
+- Project name
+- Project description  
+- Author information
+- Other template-specific options
+
+### Quick Template Setup (No Prompts)
+
+```bash
+zenml init --template e2e_batch --template-with-defaults
+```
+
+This creates a complete project structure with default values, perfect for quick experimentation.
+
+### Initialize in Specific Directory
+
+```bash
+zenml init --path ~/projects/new-ml-project
+```
+
+### Use Custom GitHub Template
+
+```bash
+zenml init --template gh:my-org/custom-zenml-template --template-tag v2.1.0
+```
+
+## What Gets Created
+
+When you run `zenml init`, ZenML creates:
+
+1. **`.zen` directory** - Hidden folder containing:
+   - Configuration files
+   - Local metadata database (if using local mode)
+   - Cache files
+
+2. **Template files** (if using `--template`):
+   - Python pipeline definitions
+   - Configuration files
+   - Example notebooks
+   - README and documentation
+   - Requirements files
+
+## Template Requirements
+
+To use project templates, you need the templates extra:
+
+```bash
+pip install 'zenml[templates]'
+```
+
+Without this, you'll see an error message:
+```
+You need to install the ZenML project template requirements to use templates.
+Please run `pip install 'zenml[templates]'` and try again.
+```
+
+## When to Use zenml init
+
+Use `zenml init` when:
+
+<CardGroup cols={2}>
+  <Card title="Starting a New Project" icon="folder-plus">
+    Initialize ZenML in a new ML project to enable pipeline tracking and stack management.
+  </Card>
+  <Card title="Using Project Templates" icon="clone">
+    Bootstrap a project with best practices and example code using built-in templates.
+  </Card>
+  <Card title="Setting Up Team Projects" icon="users">
+    Establish a shared project structure with standardized configurations.
+  </Card>
+  <Card title="Exploring ZenML" icon="compass">
+    Quickly set up example projects to learn ZenML features.
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### Initialize and Connect to Server
+
+```bash
+# Initialize repository
+zenml init
+
+# Connect to ZenML Pro
+zenml login
+
+# Verify connection
+zenml status
+```
+
+### Start with Template
+
+```bash
+# Create project from template
+zenml init --template starter --template-with-defaults
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run example pipeline
+python run.py
+```
+
+### Initialize Existing Project
+
+```bash
+# Navigate to existing project
+cd my-existing-ml-project
+
+# Initialize ZenML (no template)
+zenml init
+
+# Register existing pipelines
+zenml pipeline register my_module.training_pipeline
+```
+
+## Exploring Templates
+
+Before initializing, you can explore templates on GitHub:
+
+- Starter: https://github.com/zenml-io/template-starter
+- E2E Batch: https://github.com/zenml-io/template-e2e-batch  
+- NLP: https://github.com/zenml-io/template-nlp
+- LLM Finetuning: https://github.com/zenml-io/template-llm-finetuning
+
+## Troubleshooting
+
+### Already Initialized
+
+If you run `zenml init` in a directory that's already initialized, you'll see an error. To reinitialize:
+
+```bash
+# Remove existing .zen folder
+rm -rf .zen
+
+# Initialize again
+zenml init
+```
+
+### Template Installation Issues
+
+If template creation fails:
+
+1. Ensure you have `zenml[templates]` installed
+2. Check your internet connection (templates are fetched from GitHub)
+3. Verify the template name or URL is correct
+
+## Next Steps
+
+After initializing your repository:
+
+<CardGroup cols={2}>
+  <Card title="Login to Server" icon="right-to-bracket" href="/cli/login">
+    Connect to ZenML Pro or self-hosted server
+  </Card>
+  <Card title="Configure Stack" icon="layer-group" href="/cli/stack">
+    Set up your MLOps stack components
+  </Card>
+  <Card title="Install Integrations" icon="puzzle-piece" href="/cli/integration">
+    Add integrations for cloud providers and tools
+  </Card>
+  <Card title="Run Pipeline" icon="play" href="/cli/pipeline">
+    Execute your first pipeline
+  </Card>
+</CardGroup>

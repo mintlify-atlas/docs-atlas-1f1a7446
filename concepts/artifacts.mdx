@@ -1,0 +1,511 @@
+---
+title: Artifacts
+description: Understanding ZenML's artifact system for data versioning and lineage
+---
+
+Artifacts are the data objects that flow between steps in a ZenML pipeline. Every input and output of a step is automatically versioned, tracked, and stored as an artifact. This creates a complete lineage of your ML workflows, from raw data to trained models.
+
+## What is an Artifact?
+
+An artifact represents a versioned data object in ZenML. Artifacts are:
+
+- **Automatically tracked**: Every step input/output becomes an artifact
+- **Versioned**: Each artifact has a unique version with metadata
+- **Type-aware**: ZenML knows the data type and uses appropriate serialization
+- **Lineage-tracked**: You can trace which steps produced and consumed each artifact
+- **Cached**: Artifacts enable step caching for faster development
+
+### Artifact Creation
+
+Artifacts are created automatically when steps produce outputs:
+
+```python
+from zenml import step, pipeline
+import pandas as pd
+
+@step
+def load_data() -> pd.DataFrame:
+    """This step produces a DataFrame artifact."""
+    return pd.read_csv("data.csv")
+
+@step
+def preprocess(data: pd.DataFrame) -> pd.DataFrame:
+    """This step consumes and produces DataFrame artifacts."""
+    return data.dropna()
+
+@pipeline
+def data_pipeline():
+    # Artifacts flow between steps automatically
+    raw_data = load_data()  # Creates artifact version 1
+    clean_data = preprocess(raw_data)  # Creates artifact version 2
+```
+
+## Artifact Versioning
+
+Every artifact is automatically versioned by ZenML:
+
+```python
+from zenml import step
+from typing import Annotated
+from zenml.artifacts import ArtifactConfig
+
+@step
+def versioned_step() -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(
+        name="customer_data",
+        version="v1.0"  # Explicit version
+    )
+]:
+    """Create a versioned artifact."""
+    return load_customer_data()
+```
+
+### Version Behavior
+
+- **Auto-versioning**: If no version is specified, ZenML auto-increments versions
+- **Named versions**: You can specify meaningful version names like "production" or "v2.1"
+- **Numeric versions**: Integer versions are auto-incremented (1, 2, 3, ...)
+- **Immutable**: Once created, artifact versions cannot be modified
+
+<Note>
+Artifact versions are immutable. If you run a step again with the same version name, it will fail. Use auto-versioning during development.
+</Note>
+
+## Artifact Configuration
+
+Configure artifact properties using `ArtifactConfig`:
+
+```python
+from typing import Annotated
+from zenml.artifacts import ArtifactConfig
+from zenml.enums import ArtifactType
+from zenml import step
+
+@step
+def configured_artifact_step() -> Annotated[
+    Any,
+    ArtifactConfig(
+        name="trained_model",           # Custom name
+        version="2.0",                   # Specific version
+        tags=["production", "xgboost"],  # Tags for filtering
+        artifact_type=ArtifactType.MODEL, # Semantic type
+        run_metadata={                   # Custom metadata
+            "accuracy": 0.95,
+            "training_time": 3600,
+            "framework": "xgboost"
+        }
+    )
+]:
+    """Step that produces a configured artifact."""
+    model = train_model()
+    return model
+```
+
+### Artifact Types
+
+ZenML supports several semantic artifact types from `zenml.enums.ArtifactType`:
+
+- `ArtifactType.DATA` - Datasets and data files
+- `ArtifactType.MODEL` - Machine learning models
+- `ArtifactType.SERVICE` - Deployed services
+- `ArtifactType.DATA_ANALYSIS` - Analysis results and reports
+- `ArtifactType.BASE` - Generic artifacts
+
+```python
+from zenml.enums import ArtifactType
+
+@step
+def produce_model() -> Annotated[
+    Any,
+    ArtifactConfig(artifact_type=ArtifactType.MODEL)
+]:
+    return train_model()
+```
+
+## Materializers
+
+Materializers handle the serialization and deserialization of artifacts. ZenML automatically selects the appropriate materializer based on the type annotation.
+
+### Built-in Materializers
+
+ZenML includes materializers for common types:
+
+- **Primitives**: `str`, `int`, `float`, `bool`, `dict`, `list`
+- **NumPy**: `np.ndarray`
+- **Pandas**: `pd.DataFrame`, `pd.Series`
+- **Scikit-learn**: Models and transformers
+- **PyTorch**: `torch.nn.Module`
+- **TensorFlow/Keras**: Models and tensors
+
+```python
+import pandas as pd
+import numpy as np
+
+@step
+def data_step() -> pd.DataFrame:
+    """ZenML uses built-in Pandas materializer."""
+    return pd.DataFrame({"col1": [1, 2, 3]})
+
+@step
+def array_step() -> np.ndarray:
+    """ZenML uses built-in NumPy materializer."""
+    return np.array([1, 2, 3, 4, 5])
+```
+
+### Custom Materializers
+
+Create custom materializers for your own types:
+
+```python
+from zenml.materializers import BaseMaterializer
+from zenml.enums import ArtifactType
+from zenml.io import fileio
+import json
+from typing import Type
+
+class CustomObject:
+    def __init__(self, data: dict):
+        self.data = data
+
+class CustomMaterializer(BaseMaterializer):
+    """Materializer for CustomObject."""
+    
+    ASSOCIATED_TYPES = (CustomObject,)
+    ASSOCIATED_ARTIFACT_TYPE = ArtifactType.DATA
+
+    def load(self, data_type: Type[CustomObject]) -> CustomObject:
+        """Load artifact from storage."""
+        with fileio.open(f"{self.uri}/data.json", "r") as f:
+            data = json.load(f)
+        return CustomObject(data)
+
+    def save(self, obj: CustomObject) -> None:
+        """Save artifact to storage."""
+        with fileio.open(f"{self.uri}/data.json", "w") as f:
+            json.dump(obj.data, f)
+```
+
+### Using Custom Materializers
+
+```python
+@step(output_materializers=CustomMaterializer)
+def custom_output_step() -> CustomObject:
+    """Step using custom materializer."""
+    return CustomObject({"key": "value"})
+```
+
+<Info>
+Materializers are automatically discovered and registered when defined. You can also explicitly specify materializers per output using the `output_materializers` parameter.
+</Info>
+
+## Loading Artifacts
+
+There are multiple ways to load artifacts in ZenML:
+
+### Within Steps
+
+Artifacts flow automatically between steps:
+
+```python
+@step
+def step_a() -> pd.DataFrame:
+    return pd.DataFrame({"data": [1, 2, 3]})
+
+@step
+def step_b(input_data: pd.DataFrame) -> dict:
+    # Artifact automatically loaded and passed
+    return {"rows": len(input_data)}
+
+@pipeline
+def auto_flow_pipeline():
+    data = step_a()
+    result = step_b(data)  # Artifact flows automatically
+```
+
+### External Artifacts
+
+Load artifacts from outside the current pipeline:
+
+```python
+from zenml.artifacts import ExternalArtifact
+
+@step
+def use_external_artifact(
+    model: Any
+) -> dict:
+    """Use a model artifact from a different run."""
+    predictions = model.predict(test_data)
+    return {"predictions": predictions}
+
+@pipeline
+def inference_pipeline():
+    # Load artifact by name from any previous run
+    result = use_external_artifact(
+        model=ExternalArtifact(name="production_model")
+    )
+```
+
+### Using the Client
+
+Load artifacts programmatically outside pipelines:
+
+```python
+from zenml.client import Client
+
+# Get the client
+client = Client()
+
+# Load latest version of an artifact
+artifact = client.get_artifact_version("customer_data")
+data = artifact.load()
+
+# Load specific version
+artifact = client.get_artifact_version("customer_data", version="v1.0")
+data = artifact.load()
+
+# Load by ID
+artifact = client.get_artifact_version(name_id_or_prefix="uuid-here")
+data = artifact.load()
+```
+
+## Artifact Metadata
+
+Attach custom metadata to artifacts:
+
+```python
+from zenml import step, get_step_context
+from typing import Annotated
+from zenml.artifacts import ArtifactConfig
+
+@step
+def metadata_step() -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(
+        run_metadata={
+            "num_rows": 1000,
+            "num_features": 50,
+            "data_source": "s3://bucket/data",
+            "preprocessing_time": 120.5
+        }
+    )
+]:
+    """Produce artifact with rich metadata."""
+    df = load_and_process_data()
+    return df
+```
+
+### Runtime Metadata
+
+Log metadata dynamically within a step:
+
+```python
+from zenml import step, log_artifact_metadata
+
+@step
+def dynamic_metadata_step() -> pd.DataFrame:
+    """Log metadata at runtime."""
+    df = load_data()
+    
+    # Log metadata about the artifact
+    log_artifact_metadata(
+        metadata={
+            "row_count": len(df),
+            "column_count": len(df.columns),
+            "memory_usage": df.memory_usage(deep=True).sum(),
+            "dtypes": df.dtypes.to_dict()
+        }
+    )
+    
+    return df
+```
+
+## Artifact Lineage
+
+ZenML automatically tracks the complete lineage of artifacts:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get artifact
+artifact = client.get_artifact_version("processed_data")
+
+# Access producer step
+producer_step = artifact.step
+print(f"Produced by: {producer_step.name}")
+
+# Access pipeline run
+pipeline_run = artifact.run
+print(f"Pipeline: {pipeline_run.name}")
+
+# Get all steps that consumed this artifact
+for consumer_run in client.list_run_steps(
+    input_artifact_id=artifact.id
+):
+    print(f"Consumed by: {consumer_run.name}")
+```
+
+## Artifact Visualization
+
+ZenML can automatically generate visualizations for artifacts:
+
+```python
+from zenml import step
+from zenml.types import HTMLString, MarkdownString
+from typing import Annotated
+import pandas as pd
+
+@step(enable_artifact_visualization=True)
+def visualized_step() -> pd.DataFrame:
+    """Step with automatic visualization."""
+    df = pd.DataFrame({
+        "metric": ["accuracy", "precision", "recall"],
+        "value": [0.95, 0.92, 0.89]
+    })
+    return df  # Automatically creates table visualization
+
+@step
+def html_visualization() -> HTMLString:
+    """Return HTML for visualization."""
+    html = """
+    <div>
+        <h2>Model Performance</h2>
+        <p>Accuracy: 95%</p>
+    </div>
+    """
+    return HTMLString(html)
+
+@step
+def markdown_visualization() -> MarkdownString:
+    """Return Markdown for visualization."""
+    markdown = """
+    # Model Report
+    
+    - Accuracy: 95%
+    - Training time: 2 hours
+    - Dataset size: 1M rows
+    """
+    return MarkdownString(markdown)
+```
+
+## Artifact Storage
+
+Artifacts are stored in the artifact store configured in your stack:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get active stack's artifact store
+stack = client.active_stack
+artifact_store = stack.artifact_store
+
+print(f"Artifacts stored at: {artifact_store.path}")
+```
+
+### Storage Structure
+
+Artifacts are organized by:
+```
+artifact_store/
+├── <pipeline_id>/
+│   ├── <step_id>/
+│   │   ├── <artifact_id>/
+│   │   │   ├── <version>/
+│   │   │   │   ├── data files
+```
+
+## Artifact Caching
+
+Artifacts enable intelligent caching:
+
+```python
+@step(enable_cache=True)
+def expensive_computation() -> pd.DataFrame:
+    """This step's output is cached."""
+    # Expensive operation
+    result = process_large_dataset()
+    return result
+
+@pipeline
+def cached_pipeline():
+    # First run: executes expensive_computation
+    data = expensive_computation()
+    
+    # Second run: uses cached artifact if inputs/code unchanged
+    # expensive_computation is skipped!
+```
+
+<Note>
+Caching compares:
+- Input artifact versions
+- Step code hash
+- Step configuration
+- Parameter values
+
+If everything matches, the cached artifact is reused.
+</Note>
+
+## External Artifact Upload
+
+Upload data to ZenML without running a pipeline:
+
+```python
+from zenml.artifacts import ExternalArtifact
+import pandas as pd
+
+# Upload data directly
+df = pd.read_csv("local_data.csv")
+
+artifact = ExternalArtifact.upload_by_value(
+    value=df,
+    name="uploaded_dataset",
+    version="v1",
+    tags=["manual_upload", "testing"]
+)
+
+print(f"Uploaded artifact: {artifact.id}")
+
+# Later, use in a pipeline
+@pipeline
+def use_uploaded_data():
+    process_data(
+        data=ExternalArtifact(name="uploaded_dataset", version="v1")
+    )
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Small Artifacts" icon="file">
+    Keep artifacts reasonably sized. For huge datasets, store paths or references instead of full data.
+  </Card>
+  
+  <Card title="Rich Metadata" icon="tags">
+    Attach meaningful metadata to artifacts. It helps with debugging and understanding lineage.
+  </Card>
+  
+  <Card title="Semantic Types" icon="tag">
+    Use appropriate artifact types (MODEL, DATA, etc.) to categorize your artifacts meaningfully.
+  </Card>
+  
+  <Card title="Version Strategically" icon="code-branch">
+    Use semantic versions for production artifacts. Let auto-versioning handle development.
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Steps](/concepts/steps) - Learn how steps produce and consume artifacts
+- [Pipelines](/concepts/pipelines) - Understand artifact flow in pipelines
+- [Stacks](/concepts/stacks) - Configure artifact storage
+- [Materializers](#materializers) - Custom serialization for your types
+
+## Code Reference
+
+- ArtifactConfig: `src/zenml/artifacts/artifact_config.py:28`
+- BaseMaterializer: `src/zenml/materializers/base_materializer.py:111`
+- ExternalArtifact: `src/zenml/artifacts/external_artifact.py`

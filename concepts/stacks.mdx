@@ -1,0 +1,435 @@
+---
+title: Stacks
+description: Understanding ZenML stacks and infrastructure abstraction
+---
+
+A stack is the configuration of infrastructure and services that your ZenML pipelines run on. Stacks provide a powerful abstraction that allows you to develop locally and deploy to production without changing your pipeline code.
+
+## What is a Stack?
+
+A ZenML stack is a collection of stack components that define where and how your pipelines execute. The same pipeline code can run on different stacks without modification, enabling seamless transition from development to production.
+
+### Stack Structure
+
+Every stack must have at least two required components:
+
+1. **Orchestrator** - Controls pipeline execution and scheduling
+2. **Artifact Store** - Stores step outputs and intermediate data
+
+Optional components extend functionality:
+
+- **Container Registry** - Stores Docker images for containerized execution
+- **Step Operator** - Runs individual steps on specialized infrastructure
+- **Experiment Tracker** - Logs metrics, parameters, and models
+- **Model Deployer** - Deploys ML models as services
+- **Model Registry** - Manages model versions and lifecycle
+- **Feature Store** - Serves features for training and inference
+- **Data Validator** - Validates data quality
+- **Alerter** - Sends notifications and alerts
+- **Annotator** - Manages data annotation workflows
+- **Image Builder** - Builds Docker images for steps
+
+```python
+from zenml.client import Client
+
+client = Client()
+active_stack = client.active_stack
+
+print(f"Stack: {active_stack.name}")
+print(f"Orchestrator: {active_stack.orchestrator.name}")
+print(f"Artifact Store: {active_stack.artifact_store.name}")
+```
+
+## Default Stack
+
+ZenML comes with a default local stack:
+
+```bash
+zenml stack describe default
+```
+
+The default stack includes:
+- **Local Orchestrator**: Runs pipelines in your local environment
+- **Local Artifact Store**: Stores artifacts in your local filesystem
+
+This is perfect for getting started and local development.
+
+## Viewing Stacks
+
+### List Available Stacks
+
+```bash
+# List all stacks
+zenml stack list
+
+# View current active stack
+zenml stack get
+
+# Describe a specific stack
+zenml stack describe <stack-name>
+```
+
+### Programmatic Access
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get active stack
+active_stack = client.active_stack
+print(f"Active: {active_stack.name}")
+
+# List all stacks
+for stack in client.list_stacks():
+    print(f"Stack: {stack.name}")
+
+# Get specific stack
+production_stack = client.get_stack("production")
+```
+
+## Creating Stacks
+
+Create custom stacks by registering components and combining them:
+
+### Register Components First
+
+```bash
+# Register an orchestrator
+zenml orchestrator register kubernetes_orchestrator \
+    --flavor=kubernetes \
+    --kubernetes_context=my-cluster
+
+# Register an artifact store
+zenml artifact-store register s3_store \
+    --flavor=s3 \
+    --path=s3://my-bucket/artifacts
+
+# Register a container registry
+zenml container-registry register ecr_registry \
+    --flavor=aws \
+    --uri=123456789.dkr.ecr.us-east-1.amazonaws.com
+```
+
+### Create Stack from Components
+
+```bash
+zenml stack register production_stack \
+    --orchestrator=kubernetes_orchestrator \
+    --artifact-store=s3_store \
+    --container-registry=ecr_registry
+```
+
+### Set Active Stack
+
+```bash
+# Switch to production stack
+zenml stack set production_stack
+
+# Now all pipelines use production infrastructure
+python run_pipeline.py
+```
+
+## Stack Components
+
+Access individual components programmatically:
+
+```python
+from zenml.client import Client
+
+client = Client()
+stack = client.active_stack
+
+# Required components
+orchestrator = stack.orchestrator
+artifact_store = stack.artifact_store
+
+print(f"Orchestrator flavor: {orchestrator.flavor}")
+print(f"Artifacts at: {artifact_store.path}")
+
+# Optional components (may be None)
+if stack.experiment_tracker:
+    print(f"Tracking with: {stack.experiment_tracker.name}")
+
+if stack.model_deployer:
+    print(f"Deploying with: {stack.model_deployer.name}")
+
+if stack.container_registry:
+    print(f"Images at: {stack.container_registry.uri}")
+```
+
+## Stack Switching
+
+Easily switch between different environments:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Run pipeline on different stacks
+client.set_active_stack("local")
+training_pipeline()  # Runs locally
+
+client.set_active_stack("production")
+training_pipeline()  # Runs on production infrastructure
+```
+
+Or use the CLI:
+
+```bash
+# Development
+zenml stack set local
+python run_pipeline.py
+
+# Production
+zenml stack set production
+python run_pipeline.py
+```
+
+## Stack Recipes
+
+ZenML provides stack recipes for common cloud setups:
+
+```bash
+# Install stack recipes
+zenml integration install gcp
+
+# Deploy a full GCP stack
+zenml stack recipe deploy gcp-minimal
+```
+
+Recipes create and configure:
+- Cloud infrastructure (GKE, S3, etc.)
+- ZenML components
+- Necessary permissions and networking
+
+## Infrastructure Abstraction
+
+The power of stacks is infrastructure abstraction:
+
+```python
+from zenml import pipeline, step
+import pandas as pd
+
+@step
+def train_model(data: pd.DataFrame) -> Any:
+    """This step works on any stack!"""
+    model = train(data)
+    return model
+
+@pipeline
+def training_pipeline():
+    """This pipeline works on any stack!"""
+    data = load_data()
+    model = train_model(data)
+    evaluate(model)
+
+# No code changes needed for different environments!
+# Just switch stacks:
+
+# Development (local)
+# zenml stack set local
+# training_pipeline()
+
+# Staging (Kubernetes + S3)
+# zenml stack set staging  
+# training_pipeline()
+
+# Production (Kubernetes + S3 + Model Registry)
+# zenml stack set production
+# training_pipeline()
+```
+
+<Info>
+The same pipeline code runs on any stack. ZenML handles the infrastructure differences automatically.
+</Info>
+
+## Stack Validation
+
+ZenML validates stack compatibility:
+
+```python
+from zenml.client import Client
+from zenml.stack import Stack
+
+client = Client()
+
+# Get stack
+stack = client.active_stack
+
+# Validate stack
+try:
+    stack.validate()
+    print("Stack is valid!")
+except Exception as e:
+    print(f"Stack validation failed: {e}")
+```
+
+Validation checks:
+- Required components are present
+- Component configurations are valid
+- Components are compatible with each other
+- Credentials and permissions are accessible
+
+## Stack Settings
+
+Configure how pipelines use stack components:
+
+```python
+from zenml import pipeline
+from zenml.config import DockerSettings, ResourceSettings
+
+docker_settings = DockerSettings(
+    requirements=["tensorflow==2.13.0", "pandas"],
+    parent_image="tensorflow/tensorflow:latest-gpu",
+    environment={
+        "CUDA_VISIBLE_DEVICES": "0"
+    }
+)
+
+resource_settings = ResourceSettings(
+    cpu_count=4,
+    gpu_count=1,
+    memory="16GB"
+)
+
+@pipeline(
+    settings={
+        "docker": docker_settings,
+        "resources": resource_settings,
+    }
+)
+def configured_pipeline():
+    """Pipeline with stack-specific settings."""
+    train_model()
+```
+
+## Environment Variables
+
+Set environment variables at the stack level:
+
+```bash
+zenml stack register my_stack \
+    --orchestrator=local \
+    --artifact-store=local \
+    --environment='{"AWS_REGION": "us-east-1", "LOG_LEVEL": "INFO"}'
+```
+
+Or programmatically:
+
+```python
+from zenml.client import Client
+
+client = Client()
+stack = client.active_stack
+
+# Access environment variables
+env_vars = stack.environment
+print(env_vars)
+```
+
+## Stack Secrets
+
+Attach secrets to stacks:
+
+```bash
+# Create secret
+zenml secret create aws_credentials \
+    --aws_access_key_id=<key> \
+    --aws_secret_access_key=<secret>
+
+# Attach to stack
+zenml stack register aws_stack \
+    --orchestrator=local \
+    --artifact-store=s3_store \
+    --secrets=aws_credentials
+```
+
+## Stack Export and Import
+
+Share stack configurations across teams:
+
+```bash
+# Export stack configuration
+zenml stack export production_stack --filename=production.yaml
+
+# Import on another machine
+zenml stack import production.yaml
+```
+
+## Multi-tenant Stacks
+
+In team environments, manage stacks per project:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Each team member can have their own stacks
+stacks = client.list_stacks()
+
+for stack in stacks:
+    print(f"Stack: {stack.name}")
+    print(f"Owner: {stack.user.name}")
+    print(f"Shared: {stack.is_shared}")
+```
+
+## Stack Component Flavors
+
+Each component type has multiple flavors (implementations):
+
+```bash
+# List available orchestrator flavors
+zenml orchestrator flavor list
+
+# Example output:
+# - local: Run locally
+# - kubernetes: Run on Kubernetes
+# - kubeflow: Run on Kubeflow Pipelines
+# - airflow: Run on Apache Airflow
+# - vertex: Run on Vertex AI
+
+# List artifact store flavors  
+zenml artifact-store flavor list
+
+# Example output:
+# - local: Local filesystem
+# - s3: AWS S3
+# - gcs: Google Cloud Storage
+# - azure: Azure Blob Storage
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Separate Environments" icon="layer-group">
+    Create different stacks for development, staging, and production environments.
+  </Card>
+  
+  <Card title="Descriptive Names" icon="tag">
+    Use clear stack names that indicate their purpose: `local-dev`, `staging-k8s`, `prod-gcp`.
+  </Card>
+  
+  <Card title="Version Control" icon="code-branch">
+    Export stack configurations and store them in version control for team collaboration.
+  </Card>
+  
+  <Card title="Test Locally First" icon="flask">
+    Develop and test pipelines locally before deploying to cloud stacks.
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Stack Components](/concepts/stack-components) - Learn about individual component types
+- [Pipelines](/concepts/pipelines) - Understand how pipelines use stacks
+- [Steps](/concepts/steps) - Configure steps for different stacks
+- [Artifacts](/concepts/artifacts) - How artifacts are stored in the artifact store
+
+## Code Reference
+
+- Stack class: `src/zenml/stack/stack.py:86`
+- Stack validation: `src/zenml/stack/stack_validator.py`
+- Client stack methods: `src/zenml/client.py`

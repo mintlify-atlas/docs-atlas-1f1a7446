@@ -1,0 +1,543 @@
+---
+title: Configuring Stacks
+description: Learn how to configure and customize ZenML stacks
+---
+
+A ZenML stack is a collection of stack components that define the infrastructure for your ML pipelines. Understanding how to configure stacks is essential for running pipelines in different environments, from local development to production.
+
+## Understanding Stacks
+
+A stack consists of:
+
+- **Orchestrator** (required): Manages pipeline execution
+- **Artifact Store** (required): Stores pipeline artifacts
+- **Container Registry** (optional): Stores Docker images
+- **Step Operator** (optional): Runs specific steps on different infrastructure
+- **Experiment Tracker** (optional): Tracks experiments and metrics
+- **Model Deployer** (optional): Deploys trained models
+- **And more**: Alerters, annotators, data validators, etc.
+
+## Viewing Your Current Stack
+
+<Steps>
+
+### Step 1: Check Active Stack
+
+See which stack is currently active:
+
+```bash
+zenml stack describe
+```
+
+This shows:
+- Stack name
+- All components and their configuration
+- Stack ID
+
+### Step 2: List All Stacks
+
+View all available stacks:
+
+```bash
+zenml stack list
+```
+
+### Step 3: Get Stack Details
+
+View details of a specific stack:
+
+```bash
+zenml stack describe my_stack
+```
+
+</Steps>
+
+## Creating Your First Custom Stack
+
+<Steps>
+
+### Step 1: Register an Artifact Store
+
+Start by registering an artifact store:
+
+```bash
+# Local artifact store
+zenml artifact-store register local_store \
+  --flavor=local \
+  --path=/path/to/artifacts
+
+# S3 artifact store
+zenml artifact-store register s3_store \
+  --flavor=s3 \
+  --path=s3://my-bucket/zenml-artifacts
+
+# GCS artifact store  
+zenml artifact-store register gcs_store \
+  --flavor=gcp \
+  --path=gs://my-bucket/zenml-artifacts
+
+# Azure Blob Storage
+zenml artifact-store register azure_store \
+  --flavor=azure \
+  --path=az://my-container/zenml-artifacts
+```
+
+### Step 2: Register an Orchestrator
+
+Add an orchestrator to manage pipeline execution:
+
+```bash
+# Local orchestrator (default)
+zenml orchestrator register local_orchestrator \
+  --flavor=local
+
+# Kubernetes orchestrator
+zenml orchestrator register k8s_orchestrator \
+  --flavor=kubernetes \
+  --kubernetes_context=my-k8s-cluster
+
+# Airflow orchestrator
+zenml orchestrator register airflow_orchestrator \
+  --flavor=airflow \
+  --airflow_home=/path/to/airflow
+
+# Kubeflow orchestrator
+zenml orchestrator register kubeflow_orchestrator \
+  --flavor=kubeflow \
+  --kubeflow_hostname=https://kubeflow.example.com
+```
+
+### Step 3: Create the Stack
+
+Combine components into a stack:
+
+```bash
+zenml stack register my_custom_stack \
+  --orchestrator=local_orchestrator \
+  --artifact-store=s3_store
+```
+
+### Step 4: Activate the Stack
+
+Switch to your new stack:
+
+```bash
+zenml stack set my_custom_stack
+```
+
+### Step 5: Verify the Stack
+
+Confirm the stack is active and properly configured:
+
+```bash
+zenml stack describe
+```
+
+</Steps>
+
+## Common Stack Configurations
+
+### Local Development Stack
+
+Perfect for local development and testing:
+
+```bash
+# Register components
+zenml artifact-store register local_artifact_store \
+  --flavor=local \
+  --path=./artifacts
+
+zenml orchestrator register local_orchestrator \
+  --flavor=local
+
+# Create stack
+zenml stack register local_dev_stack \
+  --orchestrator=local_orchestrator \
+  --artifact-store=local_artifact_store
+
+# Activate
+zenml stack set local_dev_stack
+```
+
+### Cloud Production Stack
+
+Production stack with cloud infrastructure:
+
+```bash
+# Register S3 artifact store
+zenml artifact-store register production_artifacts \
+  --flavor=s3 \
+  --path=s3://my-prod-bucket/artifacts
+
+# Register Kubernetes orchestrator
+zenml orchestrator register k8s_prod_orchestrator \
+  --flavor=kubernetes \
+  --kubernetes_context=production-cluster \
+  --kubernetes_namespace=zenml
+
+# Register container registry
+zenml container-registry register ecr_registry \
+  --flavor=aws \
+  --uri=123456789.dkr.ecr.us-east-1.amazonaws.com
+
+# Create production stack
+zenml stack register production_stack \
+  --orchestrator=k8s_prod_orchestrator \
+  --artifact-store=production_artifacts \
+  --container-registry=ecr_registry
+```
+
+### Experiment Tracking Stack
+
+Stack with MLflow for experiment tracking:
+
+```bash
+# Register MLflow experiment tracker
+zenml experiment-tracker register mlflow_tracker \
+  --flavor=mlflow \
+  --tracking_uri=http://localhost:5000
+
+# Create or update stack with experiment tracker
+zenml stack register experiment_stack \
+  --orchestrator=local_orchestrator \
+  --artifact-store=local_artifact_store \
+  --experiment-tracker=mlflow_tracker
+```
+
+### Complete ML Stack
+
+Full-featured stack for end-to-end ML:
+
+```bash
+# Artifact Store
+zenml artifact-store register s3_artifacts \
+  --flavor=s3 \
+  --path=s3://mlops-bucket/artifacts
+
+# Orchestrator
+zenml orchestrator register k8s_orch \
+  --flavor=kubernetes \
+  --kubernetes_context=ml-cluster
+
+# Container Registry
+zenml container-registry register dockerhub_registry \
+  --flavor=dockerhub \
+  --uri=docker.io/mycompany
+
+# Experiment Tracker
+zenml experiment-tracker register mlflow \
+  --flavor=mlflow \
+  --tracking_uri=http://mlflow.example.com
+
+# Model Registry
+zenml model-registry register mlflow_registry \
+  --flavor=mlflow \
+  --registry_uri=http://mlflow.example.com
+
+# Model Deployer
+zenml model-deployer register seldon \
+  --flavor=seldon \
+  --kubernetes_context=ml-cluster
+
+# Alerter
+zenml alerter register slack_alerts \
+  --flavor=slack \
+  --slack_token=$SLACK_TOKEN \
+  --default_slack_channel_id=C1234567890
+
+# Create comprehensive stack
+zenml stack register ml_production_stack \
+  --orchestrator=k8s_orch \
+  --artifact-store=s3_artifacts \
+  --container-registry=dockerhub_registry \
+  --experiment-tracker=mlflow \
+  --model-registry=mlflow_registry \
+  --model-deployer=seldon \
+  --alerter=slack_alerts
+```
+
+## Managing Stack Components
+
+### List Components
+
+View all registered components of a type:
+
+```bash
+# List all artifact stores
+zenml artifact-store list
+
+# List all orchestrators
+zenml orchestrator list
+
+# List all experiment trackers
+zenml experiment-tracker list
+```
+
+### Describe Components
+
+Get details about a specific component:
+
+```bash
+zenml artifact-store describe s3_store
+```
+
+### Update Components
+
+Modify component configuration:
+
+```bash
+zenml artifact-store update s3_store \
+  --path=s3://new-bucket/artifacts
+```
+
+### Delete Components
+
+Remove a component (must not be in use):
+
+```bash
+zenml artifact-store delete old_store
+```
+
+## Stack Validation
+
+ZenML validates stacks before use:
+
+```bash
+# Validate current stack
+zenml stack describe
+
+# The output shows any validation errors
+```
+
+Common validation issues:
+- Missing required components
+- Incompatible component combinations
+- Unreachable infrastructure
+- Missing credentials
+
+## Using Stacks in Code
+
+### Access Current Stack
+
+Access stack components in your steps:
+
+```python
+from zenml import step, get_step_context
+
+@step
+def stack_aware_step() -> dict:
+    """Access stack components at runtime."""
+    context = get_step_context()
+    stack = context.stack
+    
+    print(f"Stack name: {stack.name}")
+    print(f"Orchestrator: {stack.orchestrator.name}")
+    print(f"Artifact store: {stack.artifact_store.name}")
+    
+    # Check for optional components
+    if stack.experiment_tracker:
+        print(f"Experiment tracker: {stack.experiment_tracker.name}")
+    
+    return {"stack": stack.name}
+```
+
+### Programmatic Stack Access
+
+Use the Client to work with stacks:
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get active stack
+active_stack = client.active_stack
+print(f"Active stack: {active_stack.name}")
+
+# Get specific stack
+stack = client.get_stack("production_stack")
+
+# List all stacks
+all_stacks = client.list_stacks()
+for stack in all_stacks:
+    print(f"Stack: {stack.name}")
+
+# Get stack components
+artifact_store = active_stack.artifact_store
+orchestrator = active_stack.orchestrator
+```
+
+## Stack Recipes
+
+ZenML provides stack recipes for quick setup:
+
+```bash
+# Install mlstacks (if not already installed)
+pip install mlstacks
+
+# List available recipes
+zenml stack recipe list
+
+# Deploy a stack recipe
+zenml stack recipe deploy <recipe_name>
+
+# For example, deploy a GCP stack
+zenml stack recipe deploy gcp-minimal
+```
+
+## Environment-Specific Stacks
+
+Manage stacks for different environments:
+
+```bash
+# Development stack
+zenml stack register dev_stack \
+  --orchestrator=local_orchestrator \
+  --artifact-store=local_artifacts
+
+# Staging stack  
+zenml stack register staging_stack \
+  --orchestrator=k8s_staging \
+  --artifact-store=s3_staging
+
+# Production stack
+zenml stack register prod_stack \
+  --orchestrator=k8s_prod \
+  --artifact-store=s3_prod
+
+# Switch between environments
+zenml stack set dev_stack    # For development
+zenml stack set staging_stack # For testing
+zenml stack set prod_stack   # For production
+```
+
+## Stack Sharing
+
+Share stacks across team members:
+
+```bash
+# Share a stack (requires ZenML server)
+zenml stack share production_stack
+
+# List shared stacks
+zenml stack list
+
+# Copy a shared stack
+zenml stack copy production_stack --name my_prod_stack
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Use Descriptive Names" icon="tag">
+Name stacks and components clearly (e.g., `prod_stack`, `dev_stack`)
+</Card>
+
+<Card title="Separate Environments" icon="layer-group">
+Maintain separate stacks for dev, staging, and production
+</Card>
+
+<Card title="Version Infrastructure" icon="code-branch">
+Track stack configurations in version control
+</Card>
+
+<Card title="Validate Before Use" icon="shield-check">
+Always validate stacks after configuration changes
+</Card>
+
+<Card title="Use Stack Recipes" icon="book-open">
+Leverage pre-built recipes for common configurations
+</Card>
+
+<Card title="Document Dependencies" icon="book">
+Document any special setup or credentials needed for stacks
+</Card>
+
+</CardGroup>
+
+## Stack Configuration Files
+
+Export and import stack configurations:
+
+```bash
+# Export stack configuration
+zenml stack export production_stack --filename prod_stack.yaml
+
+# Import stack configuration
+zenml stack import prod_stack.yaml
+```
+
+Example stack configuration file:
+
+```yaml prod_stack.yaml
+stack_name: production_stack
+components:
+  orchestrator:
+    name: k8s_orchestrator
+    flavor: kubernetes
+    configuration:
+      kubernetes_context: production-cluster
+      kubernetes_namespace: zenml
+  
+  artifact_store:
+    name: s3_artifacts
+    flavor: s3
+    configuration:
+      path: s3://prod-bucket/artifacts
+  
+  experiment_tracker:
+    name: mlflow_tracker
+    flavor: mlflow
+    configuration:
+      tracking_uri: http://mlflow.prod.example.com
+```
+
+## Troubleshooting
+
+### Stack Component Not Found
+
+```bash
+# List all components to find the right name
+zenml artifact-store list
+zenml orchestrator list
+```
+
+### Connection Issues
+
+```bash
+# Test artifact store connectivity
+zenml artifact-store describe my_store
+
+# Check credentials
+zenml stack describe
+```
+
+### Stack Validation Fails
+
+```bash
+# Get detailed error message
+zenml stack describe
+
+# Verify each component individually
+zenml artifact-store describe my_artifact_store
+zenml orchestrator describe my_orchestrator
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Stack Switching" href="/guides/stacks/stack-switching" icon="arrows-rotate">
+Learn how to switch between stacks efficiently
+</Card>
+
+<Card title="Creating Pipelines" href="/guides/pipelines/creating-pipelines" icon="diagram-project">
+Build pipelines that run on your configured stacks
+</Card>
+
+<Card title="Deploying Pipelines" href="/guides/pipelines/deploying-pipelines" icon="rocket">
+Deploy pipelines to production stacks
+</Card>
+
+</CardGroup>

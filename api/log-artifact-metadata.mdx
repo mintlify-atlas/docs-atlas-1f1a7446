@@ -1,0 +1,170 @@
+---
+title: "log_artifact_metadata"
+description: "Log metadata to artifact versions (deprecated)"
+icon: "tag"
+---
+
+<Warning>
+This function is deprecated and will be removed in a future release. Use `log_metadata()` with `infer_artifact=True` or specific artifact parameters instead.
+</Warning>
+
+The `log_artifact_metadata()` function logs metadata to artifact versions. It has been superseded by the more flexible `log_metadata()` function.
+
+## Signature
+
+```python
+def log_artifact_metadata(
+    metadata: Dict[str, MetadataType],
+    artifact_name: Optional[str] = None,
+    artifact_version: Optional[str] = None,
+) -> None
+```
+
+## Parameters
+
+<ParamField path="metadata" type="Dict[str, MetadataType]" required>
+  Dictionary of metadata key-value pairs to log.
+</ParamField>
+
+<ParamField path="artifact_name" type="str" optional>
+  The name of the artifact. Can be omitted when called inside a step with only one output.
+</ParamField>
+
+<ParamField path="artifact_version" type="str" optional>
+  The version of the artifact. If not provided when called inside a step, metadata will be associated with the newly created artifact.
+</ParamField>
+
+## Migration Guide
+
+### Old Way (Deprecated)
+
+```python
+from zenml import step, log_artifact_metadata
+import pandas as pd
+
+@step
+def process_data() -> pd.DataFrame:
+    df = pd.DataFrame({"value": range(100)})
+    
+    # Old way - deprecated
+    log_artifact_metadata(
+        metadata={"row_count": len(df)},
+        artifact_name="output"
+    )
+    
+    return df
+```
+
+### New Way (Recommended)
+
+```python
+from zenml import step, log_metadata
+import pandas as pd
+
+@step
+def process_data() -> pd.DataFrame:
+    df = pd.DataFrame({"value": range(100)})
+    
+    # New way - recommended
+    log_metadata(
+        metadata={"row_count": len(df)},
+        infer_artifact=True
+    )
+    
+    return df
+```
+
+## Examples with New Approach
+
+### Single Output Step
+
+```python
+from zenml import step, log_metadata
+import pandas as pd
+
+@step
+def create_dataset() -> pd.DataFrame:
+    df = pd.DataFrame({"data": range(1000)})
+    
+    # Automatically infer the artifact (single output)
+    log_metadata(
+        metadata={
+            "num_rows": len(df),
+            "columns": list(df.columns)
+        },
+        infer_artifact=True
+    )
+    
+    return df
+```
+
+### Multiple Outputs
+
+```python
+from typing import Tuple, Annotated
+from zenml import step, log_metadata
+import pandas as pd
+
+@step
+def split_data() -> Tuple[
+    Annotated[pd.DataFrame, "train"],
+    Annotated[pd.DataFrame, "test"],
+]:
+    train = pd.DataFrame({"x": range(800)})
+    test = pd.DataFrame({"x": range(200)})
+    
+    # Specify which output to attach metadata to
+    log_metadata(
+        metadata={"split": "train", "size": len(train)},
+        artifact_name="train",
+        infer_artifact=True
+    )
+    
+    log_metadata(
+        metadata={"split": "test", "size": len(test)},
+        artifact_name="test",
+        infer_artifact=True
+    )
+    
+    return train, test
+```
+
+### External Artifact
+
+```python
+from zenml import log_metadata
+
+# Log metadata to an existing artifact
+log_metadata(
+    metadata={
+        "quality_checked": True,
+        "reviewer": "data_scientist_1"
+    },
+    artifact_name="production_data",
+    artifact_version="12"
+)
+```
+
+## Why Migrate?
+
+The new `log_metadata()` function offers several advantages:
+
+1. **Unified interface** - One function for all metadata logging (steps, runs, artifacts, models)
+2. **Better inference** - More intelligent automatic detection of targets
+3. **More options** - Can log to artifacts by ID, name+version, or inference
+4. **Clearer semantics** - The `infer_artifact` parameter makes the behavior explicit
+5. **Future-proof** - Active development and support
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="log_metadata" href="./log-metadata" icon="tag">
+    Use the new unified metadata function
+  </Card>
+  <Card title="get_step_context" href="./get-step-context" icon="brackets-curly">
+    Access step context
+  </Card>
+  <Card title="ArtifactConfig" href="./artifact-config" icon="box">
+    Configure artifacts
+  </Card>
+</CardGroup>

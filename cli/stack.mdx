@@ -1,0 +1,642 @@
+---
+title: zenml stack
+description: Manage MLOps stacks and their components via the CLI.
+---
+
+The `zenml stack` command group manages your MLOps stacks - collections of infrastructure components that define where and how your pipelines execute.
+
+## Overview
+
+A ZenML stack consists of:
+
+- **Artifact Store** (required) - Stores pipeline outputs
+- **Orchestrator** (required) - Executes pipeline steps
+- **Container Registry** (optional) - Stores Docker images
+- **Model Registry** (optional) - Manages ML models
+- **Step Operator** (optional) - Runs individual steps on specialized infrastructure
+- **Feature Store** (optional) - Manages feature data
+- **Model Deployer** (optional) - Deploys models to production
+- **Experiment Tracker** (optional) - Tracks experiments and metrics
+- **Alerter** (optional) - Sends notifications
+- **Annotator** (optional) - Manages data labeling
+- **Data Validator** (optional) - Validates data quality
+- **Image Builder** (optional) - Builds Docker images
+- **Deployer** (optional) - Manages infrastructure deployments
+- **Log Store** (optional) - Aggregates and stores logs
+
+## Command Structure
+
+```bash
+zenml stack <command> [OPTIONS] [ARGUMENTS]
+```
+
+## Core Stack Commands
+
+### Register a Stack
+
+Create a new stack by combining components:
+
+```bash
+zenml stack register <STACK_NAME> [OPTIONS]
+```
+
+**Required component options:**
+
+| Option | Component Type |
+|--------|----------------|
+| `-a`, `--artifact-store` | Artifact store name |
+| `-o`, `--orchestrator` | Orchestrator name |
+
+**Optional component options:**
+
+| Option | Component Type |
+|--------|----------------|
+| `-c`, `--container_registry` | Container registry |
+| `-r`, `--model_registry` | Model registry |
+| `-s`, `--step_operator` | Step operator |
+| `-f`, `--feature_store` | Feature store |
+| `-d`, `--model_deployer` | Model deployer |
+| `-e`, `--experiment_tracker` | Experiment tracker |
+| `-al`, `--alerter` | Alerter |
+| `-an`, `--annotator` | Annotator |
+| `-dv`, `--data_validator` | Data validator |
+| `-i`, `--image_builder` | Image builder |
+| `-D`, `--deployer` | Deployer |
+| `-l`, `--log_store` | Log store |
+
+**Additional options:**
+
+| Option | Description |
+|--------|-------------|
+| `--set` | Immediately set this stack as active |
+| `-p`, `--provider` | Cloud provider (aws, azure, gcp) |
+| `-sc`, `--connector` | Service connector name |
+| `--secret` | Secrets to attach (can be specified multiple times) |
+| `--env` | Environment variables in KEY=VALUE format (can be specified multiple times) |
+
+**Examples:**
+
+```bash
+# Basic local stack
+zenml stack register local-stack \
+  -a local_artifact_store \
+  -o local_orchestrator
+
+# Production stack with multiple components
+zenml stack register production \
+  -a s3_artifact_store \
+  -o kubernetes_orchestrator \
+  -c aws_container_registry \
+  -r mlflow_model_registry \
+  -e mlflow_experiment_tracker \
+  --set
+
+# Stack with environment variables
+zenml stack register dev-stack \
+  -a local_artifact_store \
+  -o local_orchestrator \
+  --env AWS_REGION=us-west-2 \
+  --env LOG_LEVEL=DEBUG
+
+# Stack with cloud provider auto-configuration
+zenml stack register aws-stack \
+  --provider aws \
+  --connector my_aws_connector
+```
+
+### List Stacks
+
+View all registered stacks:
+
+```bash
+zenml stack list [OPTIONS]
+```
+
+**Filter options:**
+
+| Option | Description |
+|--------|-------------|
+| `--name` | Filter by name |
+| `--user` | Filter by user |
+| `--component_type` | Filter by component type |
+| `--is_shared` | Filter shared stacks (True/False) |
+| `--sort_by` | Sort results |
+| `--columns` | Select columns to display |
+| `--output`, `-o` | Output format (table, json, yaml, csv, tsv) |
+
+**Examples:**
+
+```bash
+# List all stacks
+zenml stack list
+
+# Filter by name
+zenml stack list --name "contains:prod"
+
+# List shared stacks
+zenml stack list --is_shared True
+
+# Custom columns
+zenml stack list --columns name,orchestrator,artifact_store
+
+# Export to JSON
+zenml stack list --output json
+```
+
+**Example output:**
+
+```
+┏━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━┯━━━━━━━━┓
+┃ Name          │ Orchestrator    │ Artifact Store  │ Active ┃
+┠───────────────┼─────────────────┼─────────────────┼────────┨
+┃ default       │ local           │ local           │   ✔    ┃
+┃ production    │ kubernetes      │ s3              │        ┃
+┃ staging       │ kubernetes      │ s3              │        ┃
+┗━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━┷━━━━━━━━┛
+```
+
+### Set Active Stack
+
+Switch to a different stack:
+
+```bash
+zenml stack set <STACK_NAME>
+```
+
+**Example:**
+
+```bash
+zenml stack set production
+```
+
+Output:
+```
+✔ Active stack set to: production
+```
+
+### Get Active Stack
+
+Show the currently active stack:
+
+```bash
+zenml stack get
+```
+
+Output:
+```
+Active stack: production
+```
+
+### Describe a Stack
+
+View detailed information about a stack:
+
+```bash
+zenml stack describe [STACK_NAME]
+```
+
+Without a name, describes the active stack.
+
+**Example:**
+
+```bash
+zenml stack describe production
+```
+
+Output:
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃              Stack: production                    ┃
+┠───────────────────────────────────────────────────┨
+┃ ID              │ abc123...                       ┃
+┃ Created         │ 2024-01-15 10:30:00            ┃
+┃ Updated         │ 2024-03-01 15:45:00            ┃
+┃ Shared          │ Yes                             ┃
+┠───────────────────────────────────────────────────┨
+┃ Component Type  │ Component Name                  ┃
+┠───────────────────────────────────────────────────┨
+┃ Orchestrator    │ kubernetes_orchestrator         ┃
+┃ Artifact Store  │ s3_artifact_store              ┃
+┃ Container Reg.  │ aws_container_registry         ┃
+┃ Model Registry  │ mlflow_model_registry          ┃
+┃ Exp. Tracker    │ mlflow_experiment_tracker      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### Update a Stack
+
+Modify stack components:
+
+```bash
+zenml stack update <STACK_NAME> [OPTIONS]
+```
+
+**Examples:**
+
+```bash
+# Update orchestrator
+zenml stack update production --orchestrator new_orchestrator
+
+# Add container registry
+zenml stack update production --container_registry my_registry
+
+# Remove component (set to empty string)
+zenml stack update production --model_deployer ""
+
+# Add environment variable
+zenml stack update production --env NEW_VAR=new_value
+```
+
+### Rename a Stack
+
+```bash
+zenml stack rename <OLD_NAME> <NEW_NAME>
+```
+
+**Example:**
+
+```bash
+zenml stack rename staging pre-production
+```
+
+### Copy a Stack
+
+Duplicate an existing stack:
+
+```bash
+zenml stack copy <SOURCE_STACK> <NEW_STACK_NAME>
+```
+
+**Example:**
+
+```bash
+zenml stack copy production production-backup
+```
+
+### Delete a Stack
+
+```bash
+zenml stack delete <STACK_NAME>
+```
+
+**Example:**
+
+```bash
+zenml stack delete old-stack
+```
+
+<Warning>
+You cannot delete the active stack. Switch to a different stack first.
+</Warning>
+
+### Share a Stack
+
+Make a stack available to all users:
+
+```bash
+zenml stack share <STACK_NAME>
+```
+
+## Stack Components
+
+Each component type has its own CLI command group for management.
+
+### Register a Component
+
+General syntax:
+
+```bash
+zenml <component-type> register <NAME> --flavor <FLAVOR> [OPTIONS]
+```
+
+**Examples:**
+
+```bash
+# Register S3 artifact store
+zenml artifact-store register s3_store \
+  --flavor s3 \
+  --path s3://my-bucket/artifacts
+
+# Register Kubernetes orchestrator
+zenml orchestrator register k8s_orchestrator \
+  --flavor kubernetes \
+  --kubernetes_context my-cluster
+
+# Register MLflow experiment tracker
+zenml experiment-tracker register mlflow_tracker \
+  --flavor mlflow \
+  --tracking_uri https://mlflow.example.com
+
+# Register component with labels
+zenml artifact-store register prod_store \
+  --flavor s3 \
+  --path s3://prod-bucket/artifacts \
+  -l environment=production \
+  -l team=ml-platform
+```
+
+### List Components
+
+```bash
+zenml <component-type> list [OPTIONS]
+```
+
+**Examples:**
+
+```bash
+# List all artifact stores
+zenml artifact-store list
+
+# List orchestrators
+zenml orchestrator list
+
+# List with filters
+zenml artifact-store list --flavor s3
+zenml orchestrator list --name "contains:kubernetes"
+```
+
+### Describe a Component
+
+```bash
+zenml <component-type> describe <NAME>
+```
+
+**Example:**
+
+```bash
+zenml artifact-store describe s3_store
+```
+
+### Update a Component
+
+```bash
+zenml <component-type> update <NAME> [OPTIONS]
+```
+
+**Example:**
+
+```bash
+zenml artifact-store update s3_store --path s3://new-bucket/artifacts
+```
+
+### Delete a Component
+
+```bash
+zenml <component-type> delete <NAME>
+```
+
+**Example:**
+
+```bash
+zenml orchestrator delete old_orchestrator
+```
+
+<Warning>
+You cannot delete a component that's currently used by any stack.
+</Warning>
+
+## Available Component Types
+
+Use these command names to manage components:
+
+| Command | Component Type |
+|---------|----------------|
+| `artifact-store` | Artifact storage |
+| `orchestrator` | Pipeline orchestration |
+| `container-registry` | Docker image storage |
+| `model-registry` | ML model registry |
+| `step-operator` | Special step execution |
+| `feature-store` | Feature management |
+| `model-deployer` | Model serving |
+| `experiment-tracker` | Experiment tracking |
+| `alerter` | Alerting and notifications |
+| `annotator` | Data annotation |
+| `data-validator` | Data quality checks |
+| `image-builder` | Image building |
+| `deployer` | Infrastructure deployment |
+| `log-store` | Log aggregation |
+
+## Component Flavors
+
+### List Available Flavors
+
+```bash
+zenml <component-type> flavor list
+```
+
+**Example:**
+
+```bash
+zenml orchestrator flavor list
+```
+
+Output:
+```
+┏━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━┓
+┃ Name            │ Integration   │ Service Connector  ┃
+┠─────────────────┼───────────────┼────────────────────┨
+┃ local           │ built-in      │ -                  ┃
+┃ kubernetes      │ kubernetes    │ kubernetes         ┃
+┃ kubeflow        │ kubeflow      │ kubernetes         ┃
+┃ airflow         │ airflow       │ -                  ┃
+┃ sagemaker       │ aws           │ aws                ┃
+┗━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### Describe a Flavor
+
+```bash
+zenml <component-type> flavor describe <FLAVOR_NAME>
+```
+
+**Example:**
+
+```bash
+zenml orchestrator flavor describe kubernetes
+```
+
+Shows configuration options, requirements, and usage examples.
+
+## Service Connectors
+
+Service connectors provide authentication to cloud resources.
+
+### Connect Component to Service Connector
+
+```bash
+zenml <component-type> connect <COMPONENT_NAME> -c <CONNECTOR_NAME>
+```
+
+**Example:**
+
+```bash
+zenml artifact-store connect s3_store -c aws_connector
+```
+
+### Disconnect Component
+
+```bash
+zenml <component-type> disconnect <COMPONENT_NAME>
+```
+
+## Stack Validation
+
+Check if a stack is properly configured:
+
+```bash
+zenml stack describe <STACK_NAME>
+```
+
+The describe command validates:
+- All components are accessible
+- Required integrations are installed
+- Configuration is valid
+- Authentication works
+
+## Stack Export and Import
+
+### Export Stack Configuration
+
+```bash
+zenml stack export <STACK_NAME> --filename stack.yaml
+```
+
+### Import Stack Configuration
+
+```bash
+zenml stack import <FILENAME>
+```
+
+**Example workflow:**
+
+```bash
+# On machine A: export stack
+zenml stack export production --filename prod_stack.yaml
+
+# Transfer file to machine B
+
+# On machine B: import stack
+zenml stack import prod_stack.yaml
+```
+
+## Environment Variables
+
+Attach environment variables to stacks for runtime configuration:
+
+```bash
+# During registration
+zenml stack register my-stack \
+  -a local_artifact_store \
+  -o local_orchestrator \
+  --env AWS_REGION=us-west-2 \
+  --env LOG_LEVEL=DEBUG
+
+# Update existing stack
+zenml stack update my-stack --env NEW_VAR=value
+```
+
+These variables are available to all pipeline steps running on the stack.
+
+## Best Practices
+
+### Stack Naming
+
+Use descriptive names that indicate environment and purpose:
+
+```bash
+zenml stack register prod-training-gpu
+zenml stack register staging-inference
+zenml stack register dev-local
+```
+
+### Component Organization
+
+Register reusable components once, use in multiple stacks:
+
+```bash
+# Register components
+zenml artifact-store register prod_s3 --flavor s3 --path s3://prod-bucket
+zenml orchestrator register k8s_prod --flavor kubernetes
+zenml orchestrator register k8s_staging --flavor kubernetes
+
+# Use in different stacks
+zenml stack register prod -a prod_s3 -o k8s_prod
+zenml stack register staging -a prod_s3 -o k8s_staging
+```
+
+### Stack Validation
+
+Always validate after registration:
+
+```bash
+zenml stack register new-stack -a store -o orch
+zenml stack describe new-stack
+```
+
+### Development vs Production
+
+Maintain separate stacks for different environments:
+
+```bash
+# Local development
+zenml stack register dev -a local_store -o local_orch
+
+# Staging
+zenml stack register staging -a s3_staging -o k8s_staging
+
+# Production  
+zenml stack register prod -a s3_prod -o k8s_prod
+```
+
+## Troubleshooting
+
+### Component Not Found
+
+```
+Error: Orchestrator 'my_orchestrator' not found.
+```
+
+**Solution:** Register the component first:
+```bash
+zenml orchestrator list  # Check available orchestrators
+zenml orchestrator register my_orchestrator --flavor kubernetes
+```
+
+### Integration Not Installed
+
+```
+Error: The 'kubernetes' integration is not installed.
+```
+
+**Solution:** Install required integration:
+```bash
+zenml integration install kubernetes
+```
+
+### Stack Already Exists
+
+```
+Error: Stack 'my-stack' already exists.
+```
+
+**Solution:** Use a different name or update existing stack:
+```bash
+zenml stack update my-stack -o new_orchestrator
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Install Integrations" icon="puzzle-piece" href="/cli/integration">
+    Add integrations for cloud providers and orchestrators
+  </Card>
+  <Card title="Run Pipelines" icon="play" href="/cli/pipeline">
+    Execute pipelines on your configured stack
+  </Card>
+  <Card title="Service Connectors" icon="plug">
+    Learn about cloud authentication
+  </Card>
+  <Card title="Stack Components Guide" icon="book">
+    Detailed documentation for each component type
+  </Card>
+</CardGroup>

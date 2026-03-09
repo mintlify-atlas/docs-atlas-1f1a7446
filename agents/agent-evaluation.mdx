@@ -1,0 +1,539 @@
+---
+title: Agent Evaluation
+description: Build reproducible evaluation pipelines to systematically compare agent architectures and configurations
+---
+
+Evaluating AI agents requires systematic testing across diverse scenarios. ZenML enables reproducible evaluation pipelines that compare architectures, track metrics, and generate comprehensive reports.
+
+## Why evaluate agents?
+
+Agent evaluation reveals critical insights:
+
+- **Architecture comparison**: Which approach works best for your use case?
+- **Cost optimization**: LLM-only vs. hybrid architectures can differ 10x in cost
+- **Performance tracking**: Monitor latency, accuracy, and user satisfaction
+- **Regression detection**: Catch degradation when updating prompts or models
+- **Production readiness**: Validate agents before deployment
+
+## Evaluation pipeline structure
+
+A typical evaluation pipeline has four stages:
+
+```python
+from zenml import pipeline, step
+from typing import Annotated, List, Dict, Any
+
+@step
+def load_test_dataset() -> Annotated[List[Dict[str, str]], "test_data"]:
+    """Load test queries with ground truth."""
+    return [
+        {"query": "How do I return an item?", "expected_intent": "returns"},
+        {"query": "Where's my refund?", "expected_intent": "returns"},
+        {"query": "Update my payment method", "expected_intent": "billing"},
+        {"query": "Product won't turn on", "expected_intent": "technical"},
+    ]
+
+@step
+def run_agent_evaluation(
+    test_data: List[Dict[str, str]],
+) -> Annotated[Dict[str, Any], "evaluation_results"]:
+    """Evaluate agent on test dataset."""
+    agent = initialize_agent()
+    results = []
+    
+    for item in test_data:
+        start_time = time.time()
+        response = agent.process(item["query"])
+        latency_ms = (time.time() - start_time) * 1000
+        
+        results.append({
+            "query": item["query"],
+            "expected": item["expected_intent"],
+            "predicted": response.intent,
+            "confidence": response.confidence,
+            "latency_ms": latency_ms,
+            "tokens_used": response.tokens_used,
+        })
+    
+    return {"results": results}
+
+@step
+def compute_metrics(
+    evaluation_results: Dict[str, Any],
+) -> Annotated[Dict[str, float], "metrics"]:
+    """Compute evaluation metrics."""
+    results = evaluation_results["results"]
+    
+    # Accuracy
+    correct = sum(1 for r in results if r["predicted"] == r["expected"])
+    accuracy = correct / len(results)
+    
+    # Average latency
+    avg_latency = sum(r["latency_ms"] for r in results) / len(results)
+    
+    # Total tokens
+    total_tokens = sum(r["tokens_used"] for r in results)
+    
+    # Average confidence
+    avg_confidence = sum(r["confidence"] for r in results) / len(results)
+    
+    return {
+        "accuracy": accuracy,
+        "avg_latency_ms": avg_latency,
+        "total_tokens": total_tokens,
+        "avg_confidence": avg_confidence,
+    }
+
+@step
+def generate_evaluation_report(
+    metrics: Dict[str, float],
+    evaluation_results: Dict[str, Any],
+) -> Annotated[str, "evaluation_report"]:
+    """Generate HTML evaluation report."""
+    results = evaluation_results["results"]
+    
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Evaluation Report</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 40px; }}
+        .metric {{ background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+        table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #4CAF50; color: white; }}
+        .correct {{ background-color: #d4edda; }}
+        .incorrect {{ background-color: #f8d7da; }}
+    </style>
+</head>
+<body>
+    <h1>Agent Evaluation Report</h1>
+    
+    <h2>Summary Metrics</h2>
+    <div class="metric"><strong>Accuracy:</strong> {metrics['accuracy']:.1%}</div>
+    <div class="metric"><strong>Average Latency:</strong> {metrics['avg_latency_ms']:.1f}ms</div>
+    <div class="metric"><strong>Total Tokens:</strong> {metrics['total_tokens']:.0f}</div>
+    <div class="metric"><strong>Average Confidence:</strong> {metrics['avg_confidence']:.2f}</div>
+    
+    <h2>Detailed Results</h2>
+    <table>
+        <tr>
+            <th>Query</th>
+            <th>Expected</th>
+            <th>Predicted</th>
+            <th>Confidence</th>
+            <th>Latency (ms)</th>
+            <th>Tokens</th>
+        </tr>"""
+    
+    for result in results:
+        row_class = "correct" if result["predicted"] == result["expected"] else "incorrect"
+        html += f"""
+        <tr class="{row_class}">
+            <td>{result['query']}</td>
+            <td>{result['expected']}</td>
+            <td>{result['predicted']}</td>
+            <td>{result['confidence']:.2f}</td>
+            <td>{result['latency_ms']:.1f}</td>
+            <td>{result['tokens_used']}</td>
+        </tr>"""
+    
+    html += """
+    </table>
+</body>
+</html>"""
+    
+    return html
+
+@pipeline
+def agent_evaluation_pipeline() -> str:
+    """Complete agent evaluation workflow."""
+    test_data = load_test_dataset()
+    results = run_agent_evaluation(test_data)
+    metrics = compute_metrics(results)
+    report = generate_evaluation_report(metrics, results)
+    return report
+```
+
+## Comparing multiple architectures
+
+Evaluate different agent approaches side-by-side:
+
+```python
+from agents import SingleAgentRAG, MultiSpecialistAgents, LangGraphAgent
+
+@step
+def compare_agent_architectures(
+    test_queries: List[str],
+) -> Annotated[Dict[str, Any], "comparison_results"]:
+    """Compare three different agent architectures."""
+    architectures = {
+        "SingleAgentRAG": SingleAgentRAG(),
+        "MultiSpecialist": MultiSpecialistAgents(),
+        "LangGraph": LangGraphAgent(),
+    }
+    
+    comparison = {}
+    
+    for name, agent in architectures.items():
+        results = []
+        total_latency = 0
+        total_tokens = 0
+        
+        for query in test_queries:
+            start_time = time.time()
+            response = agent.process_query(query)
+            
+            results.append({
+                "query": query,
+                "response": response.text,
+                "confidence": response.confidence,
+                "latency_ms": response.latency_ms,
+                "tokens": response.tokens_used,
+            })
+            
+            total_latency += response.latency_ms
+            total_tokens += response.tokens_used
+        
+        comparison[name] = {
+            "results": results,
+            "avg_latency_ms": total_latency / len(test_queries),
+            "total_tokens": total_tokens,
+            "avg_confidence": sum(r["confidence"] for r in results) / len(results),
+        }
+    
+    return comparison
+
+@step
+def generate_comparison_report(
+    comparison: Dict[str, Any],
+) -> Annotated[str, "comparison_report"]:
+    """Generate side-by-side comparison report."""
+    html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Architecture Comparison</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .architecture { border: 2px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .metric { background: #f0f0f0; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .best { background: #d4edda; border-color: #28a745; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Agent Architecture Comparison</h1>"""
+    
+    # Summary comparison table
+    html += """<h2>Performance Summary</h2>
+    <table>
+        <tr>
+            <th>Architecture</th>
+            <th>Avg Latency (ms)</th>
+            <th>Total Tokens</th>
+            <th>Avg Confidence</th>
+        </tr>"""
+    
+    for name, data in comparison.items():
+        html += f"""
+        <tr>
+            <td><strong>{name}</strong></td>
+            <td>{data['avg_latency_ms']:.1f}</td>
+            <td>{data['total_tokens']}</td>
+            <td>{data['avg_confidence']:.2f}</td>
+        </tr>"""
+    
+    html += """</table>
+    
+    <h2>Detailed Results</h2>"""
+    
+    # Detailed results for each architecture
+    for name, data in comparison.items():
+        html += f"""<div class="architecture">
+        <h3>{name}</h3>
+        <div class="metric">Average Latency: {data['avg_latency_ms']:.1f}ms</div>
+        <div class="metric">Total Tokens: {data['total_tokens']}</div>
+        <div class="metric">Average Confidence: {data['avg_confidence']:.2f}</div>
+        </div>"""
+    
+    html += """</body>
+</html>"""
+    
+    return html
+
+@pipeline
+def architecture_comparison_pipeline() -> str:
+    """Compare multiple agent architectures."""
+    test_queries = load_test_queries()
+    comparison = compare_agent_architectures(test_queries)
+    report = generate_comparison_report(comparison)
+    return report
+```
+
+## Hybrid agent evaluation
+
+Compare LLM-only vs. hybrid (LLM + classifier) approaches:
+
+```python
+@step
+def train_intent_classifier(
+    training_queries: List[str],
+    training_labels: List[str],
+) -> Annotated[Any, "intent_classifier"]:
+    """Train traditional ML classifier."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.naive_bayes import MultinomialNB
+    from sklearn.pipeline import Pipeline
+    
+    classifier = Pipeline([
+        ('tfidf', TfidfVectorizer(max_features=100)),
+        ('clf', MultinomialNB()),
+    ])
+    
+    classifier.fit(training_queries, training_labels)
+    return classifier
+
+@step
+def evaluate_hybrid_agent(
+    test_queries: List[str],
+    test_labels: List[str],
+    classifier: Any,
+) -> Annotated[Dict[str, Any], "hybrid_results"]:
+    """Evaluate hybrid agent (classifier + LLM)."""
+    results = []
+    llm_calls = 0
+    classifier_only = 0
+    
+    for query, expected_label in zip(test_queries, test_labels):
+        # Get classifier prediction
+        predicted_intent = classifier.predict([query])[0]
+        confidence = classifier.predict_proba([query]).max()
+        
+        # Use LLM only for low-confidence cases
+        if confidence < 0.7:
+            llm_response = call_llm(query, predicted_intent)
+            used_llm = True
+            llm_calls += 1
+        else:
+            llm_response = get_template_response(predicted_intent)
+            used_llm = False
+            classifier_only += 1
+        
+        results.append({
+            "query": query,
+            "expected": expected_label,
+            "predicted": predicted_intent,
+            "confidence": confidence,
+            "used_llm": used_llm,
+        })
+    
+    accuracy = sum(1 for r in results if r["predicted"] == r["expected"]) / len(results)
+    
+    return {
+        "results": results,
+        "accuracy": accuracy,
+        "llm_calls": llm_calls,
+        "classifier_only": classifier_only,
+        "llm_percentage": (llm_calls / len(results)) * 100,
+    }
+
+@step
+def evaluate_llm_only_agent(
+    test_queries: List[str],
+    test_labels: List[str],
+) -> Annotated[Dict[str, Any], "llm_only_results"]:
+    """Evaluate pure LLM agent."""
+    results = []
+    
+    for query, expected_label in zip(test_queries, test_labels):
+        response = call_llm_classifier(query)
+        
+        results.append({
+            "query": query,
+            "expected": expected_label,
+            "predicted": response.intent,
+        })
+    
+    accuracy = sum(1 for r in results if r["predicted"] == r["expected"]) / len(results)
+    
+    return {
+        "results": results,
+        "accuracy": accuracy,
+        "llm_calls": len(results),  # Always uses LLM
+    }
+
+@step
+def compare_approaches(
+    llm_only: Dict[str, Any],
+    hybrid: Dict[str, Any],
+) -> Annotated[str, "comparison_report"]:
+    """Compare LLM-only vs. hybrid approach."""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>LLM-Only vs. Hybrid Comparison</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 40px; }}
+        .comparison {{ display: flex; gap: 20px; }}
+        .approach {{ flex: 1; border: 2px solid #ddd; padding: 20px; border-radius: 8px; }}
+        .metric {{ background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; }}
+        .winner {{ border-color: #28a745; background: #d4edda; }}
+    </style>
+</head>
+<body>
+    <h1>LLM-Only vs. Hybrid Agent Comparison</h1>
+    
+    <div class="comparison">
+        <div class="approach">
+            <h2>LLM-Only Agent</h2>
+            <div class="metric"><strong>Accuracy:</strong> {llm_only['accuracy']:.1%}</div>
+            <div class="metric"><strong>LLM Calls:</strong> {llm_only['llm_calls']}</div>
+            <div class="metric"><strong>Cost:</strong> High (100% LLM)</div>
+        </div>
+        
+        <div class="approach winner">
+            <h2>Hybrid Agent ✅</h2>
+            <div class="metric"><strong>Accuracy:</strong> {hybrid['accuracy']:.1%}</div>
+            <div class="metric"><strong>LLM Calls:</strong> {hybrid['llm_calls']} ({hybrid['llm_percentage']:.1f}%)</div>
+            <div class="metric"><strong>Classifier Only:</strong> {hybrid['classifier_only']}</div>
+            <div class="metric"><strong>Cost:</strong> {100 - hybrid['llm_percentage']:.1f}% reduction</div>
+        </div>
+    </div>
+    
+    <h2>Key Findings</h2>
+    <ul>
+        <li>Hybrid approach reduces LLM calls by {100 - hybrid['llm_percentage']:.1f}%</li>
+        <li>Accuracy difference: {abs(hybrid['accuracy'] - llm_only['accuracy']):.1%}</li>
+        <li>Cost savings: Significant reduction with minimal accuracy impact</li>
+    </ul>
+</body>
+</html>"""
+    
+    return html
+
+@pipeline
+def hybrid_evaluation_pipeline() -> str:
+    """Compare LLM-only vs. hybrid approaches."""
+    # Load data
+    train_queries, train_labels = load_training_data()
+    test_queries, test_labels = load_test_data()
+    
+    # Train classifier
+    classifier = train_intent_classifier(train_queries, train_labels)
+    
+    # Evaluate both approaches
+    llm_only = evaluate_llm_only_agent(test_queries, test_labels)
+    hybrid = evaluate_hybrid_agent(test_queries, test_labels, classifier)
+    
+    # Generate comparison report
+    report = compare_approaches(llm_only, hybrid)
+    return report
+```
+
+## Evaluation metrics
+
+Key metrics for agent evaluation:
+
+### Accuracy metrics
+- **Intent accuracy**: Correct classification rate
+- **Response quality**: Human evaluation or LLM-as-judge
+- **Hallucination rate**: Incorrect information percentage
+
+### Performance metrics
+- **Latency**: Response time (p50, p95, p99)
+- **Throughput**: Queries per second
+- **Token usage**: Total tokens consumed
+
+### Cost metrics
+- **Cost per query**: API costs
+- **LLM call percentage**: For hybrid systems
+- **Total evaluation cost**: Budget tracking
+
+### User experience metrics
+- **Confidence scores**: Agent certainty
+- **Tool usage**: How often tools are called
+- **Multi-turn success**: Conversation completion rate
+
+## Visualization with Mermaid
+
+Generate interactive workflow diagrams:
+
+```python
+@step
+def generate_workflow_visualization(
+    agent: BaseAgent,
+) -> Annotated[str, "workflow_diagram"]:
+    """Generate Mermaid diagram of agent workflow."""
+    html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Workflow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="mermaid">
+        graph TD
+            A[Customer Query] --> B[Analyze Query]
+            B --> C{Classification}
+            C -->|returns| D[Returns Specialist]
+            C -->|billing| E[Billing Specialist]
+            C -->|technical| F[Technical Support]
+            D --> G[Generate Response]
+            E --> G
+            F --> G
+            G --> H[Customer Response]
+            
+            style A fill:#e1f5fe
+            style H fill:#e8f5e8
+            style B fill:#fff3e0
+            style G fill:#f3e5f5
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>"""
+    return html
+```
+
+## Best practices
+
+1. **Diverse test data**: Cover edge cases, different query types, and complexity levels
+2. **Version datasets**: Store test data as artifacts for reproducibility
+3. **Track costs**: Monitor token usage and API costs during evaluation
+4. **Compare systematically**: Run all architectures on identical data
+5. **Generate reports**: Create HTML visualizations for stakeholder review
+6. **Automate evaluation**: Schedule regular evaluation runs
+7. **Use ground truth**: Label test data with expected outputs
+8. **Measure latency**: Track response times under realistic conditions
+
+## Real-world example
+
+The [agent comparison example](/agents/examples/agent-comparison) demonstrates:
+
+- Training an intent classifier on customer service queries
+- Evaluating three architectures (SingleAgentRAG, MultiSpecialist, LangGraph)
+- Generating performance metrics and visualizations
+- Creating interactive Mermaid diagrams
+- Producing comprehensive HTML comparison reports
+
+The evaluation reveals that hybrid approaches (classifier + LLM) often achieve similar accuracy to pure LLM solutions while reducing costs by 70-90%.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Agent comparison example" href="/agents/examples/agent-comparison" icon="code">
+    Complete evaluation pipeline comparing three architectures
+  </Card>
+  <Card title="Orchestrating agents" href="/agents/orchestrating-agents" icon="diagram-project">
+    Build production-ready agent workflows
+  </Card>
+  <Card title="Agent frameworks" href="/agents/agent-frameworks" icon="puzzle-piece">
+    Integration patterns for 12+ frameworks
+  </Card>
+  <Card title="Deploying agents" href="/agents/examples/deploying-agents" icon="rocket">
+    Deploy agents as HTTP services
+  </Card>
+</CardGroup>

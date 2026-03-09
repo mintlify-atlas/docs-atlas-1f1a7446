@@ -1,0 +1,429 @@
+---
+title: "ResourceSettings"
+description: "Configure hardware resources for steps"
+icon: "server"
+---
+
+The `ResourceSettings` class allows you to specify CPU, memory, GPU, and other resource requirements for pipeline steps.
+
+## Signature
+
+```python
+ResourceSettings(
+    cpu_count: Optional[PositiveInt] = None,
+    gpu_count: Optional[NonNegativeInt] = None,
+    memory: Optional[str] = None,
+    node_selectors: Optional[Dict[str, str]] = None,
+    affinity: Optional[Dict[str, Any]] = None,
+    tolerations: Optional[List[Dict[str, Any]]] = None,
+    # Additional deployer/serverless settings
+    min_replicas: Optional[int] = None,
+    max_replicas: Optional[int] = None,
+    autoscaling_metric: Optional[str] = None,
+    autoscaling_target: Optional[float] = None,
+    max_concurrency: Optional[int] = None,
+)
+```
+
+## Parameters
+
+<ParamField path="cpu_count" type="int" optional>
+  Number of CPUs to allocate. Must be a positive integer.
+</ParamField>
+
+<ParamField path="gpu_count" type="int" optional>
+  Number of GPUs to allocate. Must be zero or positive.
+</ParamField>
+
+<ParamField path="memory" type="str" optional>
+  Amount of memory to allocate. Format: number followed by unit (e.g., "4GB", "512MB", "2GiB").
+</ParamField>
+
+<ParamField path="node_selectors" type="Dict[str, str]" optional>
+  Kubernetes node selector constraints.
+</ParamField>
+
+<ParamField path="affinity" type="Dict[str, Any]" optional>
+  Kubernetes affinity rules.
+</ParamField>
+
+<ParamField path="tolerations" type="List[Dict[str, Any]]" optional>
+  Kubernetes tolerations for node taints.
+</ParamField>
+
+<ParamField path="min_replicas" type="int" optional>
+  Minimum number of replicas (for deployments). Set to 0 to allow scaling to zero.
+</ParamField>
+
+<ParamField path="max_replicas" type="int" optional>
+  Maximum number of replicas (for deployments). None means no specific limit.
+</ParamField>
+
+<ParamField path="autoscaling_metric" type="str" optional>
+  Metric to use for autoscaling (e.g., "cpu", "concurrency", "rps").
+</ParamField>
+
+<ParamField path="autoscaling_target" type="float" optional>
+  Target value for the autoscaling metric (e.g., 75.0 for 75% CPU).
+</ParamField>
+
+<ParamField path="max_concurrency" type="int" optional>
+  Maximum number of concurrent requests per instance.
+</ParamField>
+
+## Examples
+
+### Basic CPU and Memory
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=4,
+            memory="8GB"
+        )
+    }
+)
+def data_processing() -> None:
+    # This step will run with 4 CPUs and 8GB memory
+    pass
+```
+
+### GPU-Accelerated Step
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=8,
+            gpu_count=2,
+            memory="32GB"
+        )
+    }
+)
+def train_deep_learning_model() -> None:
+    # This step will run with 2 GPUs
+    import torch
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Training code...
+```
+
+### Memory Units
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+# Different memory unit formats
+@step(
+    settings={
+        "resources": ResourceSettings(
+            memory="512MB"  # Megabytes
+        )
+    }
+)
+def small_step() -> None:
+    pass
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            memory="4GiB"  # Gibibytes (binary)
+        )
+    }
+)
+def medium_step() -> None:
+    pass
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            memory="16GB"  # Gigabytes (decimal)
+        )
+    }
+)
+def large_step() -> None:
+    pass
+```
+
+### Kubernetes Node Selectors
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=16,
+            memory="64GB",
+            node_selectors={
+                "node.kubernetes.io/instance-type": "n1-highmem-16",
+                "cloud.google.com/gke-nodepool": "high-memory-pool"
+            }
+        )
+    }
+)
+def memory_intensive_step() -> None:
+    # Runs on specific node types
+    pass
+```
+
+### GPU Node Selection
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            gpu_count=4,
+            node_selectors={
+                "accelerator": "nvidia-tesla-v100"
+            }
+        )
+    }
+)
+def gpu_training() -> None:
+    # Runs on nodes with V100 GPUs
+    pass
+```
+
+### Different Resources for Different Steps
+
+```python
+from zenml import pipeline, step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=2,
+            memory="4GB"
+        )
+    }
+)
+def load_data() -> dict:
+    return {"data": [1, 2, 3]}
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=8,
+            gpu_count=1,
+            memory="16GB"
+        )
+    }
+)
+def train_model(data: dict) -> None:
+    # Heavy computation
+    pass
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=4,
+            memory="8GB"
+        )
+    }
+)
+def evaluate_model() -> None:
+    # Medium computation
+    pass
+
+@pipeline
+def ml_pipeline():
+    data = load_data()
+    train_model(data)
+    evaluate_model()
+```
+
+### Deployment Settings
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=2,
+            memory="4GB",
+            # Autoscaling configuration
+            min_replicas=2,  # Always keep at least 2 instances
+            max_replicas=10,  # Scale up to 10 instances
+            autoscaling_metric="cpu",
+            autoscaling_target=75.0,  # Target 75% CPU utilization
+            max_concurrency=50  # Max 50 concurrent requests per instance
+        )
+    }
+)
+def model_serving_step() -> None:
+    # Deployed with autoscaling
+    pass
+```
+
+### Serverless Configuration
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=4,
+            memory="8GB",
+            min_replicas=0,  # Can scale to zero when idle
+            max_replicas=100,  # Scale up to 100 for bursts
+            autoscaling_metric="concurrency",
+            autoscaling_target=10.0,  # Target 10 concurrent requests
+            max_concurrency=20  # Max 20 concurrent per instance
+        )
+    }
+)
+def serverless_inference() -> None:
+    # Scales to zero when not in use
+    pass
+```
+
+### Kubernetes Tolerations
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            gpu_count=2,
+            tolerations=[
+                {
+                    "key": "nvidia.com/gpu",
+                    "operator": "Exists",
+                    "effect": "NoSchedule"
+                }
+            ]
+        )
+    }
+)
+def gpu_step_with_tolerations() -> None:
+    # Can run on tainted GPU nodes
+    pass
+```
+
+### Affinity Rules
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=16,
+            affinity={
+                "nodeAffinity": {
+                    "requiredDuringSchedulingIgnoredDuringExecution": {
+                        "nodeSelectorTerms": [{
+                            "matchExpressions": [{
+                                "key": "node.kubernetes.io/instance-type",
+                                "operator": "In",
+                                "values": ["n1-standard-16", "n1-highmem-16"]
+                            }]
+                        }]
+                    }
+                }
+            }
+        )
+    }
+)
+def step_with_affinity() -> None:
+    # Runs on specific node types with affinity
+    pass
+```
+
+### Dynamic Resource Configuration
+
+```python
+from zenml import step, pipeline
+from zenml.config import ResourceSettings
+
+@step
+def configurable_step() -> None:
+    pass
+
+@pipeline
+def dynamic_pipeline(use_gpu: bool = False):
+    # Configure resources dynamically
+    if use_gpu:
+        resources = ResourceSettings(
+            cpu_count=8,
+            gpu_count=1,
+            memory="16GB"
+        )
+    else:
+        resources = ResourceSettings(
+            cpu_count=4,
+            memory="8GB"
+        )
+    
+    configurable_step.with_options(
+        settings={"resources": resources}
+    )()
+
+# Run with GPU
+dynamic_pipeline(use_gpu=True)
+
+# Run without GPU
+dynamic_pipeline(use_gpu=False)
+```
+
+## Memory Units
+
+Supported memory unit formats:
+
+- **Decimal units**: KB, MB, GB, TB, PB (powers of 1000)
+- **Binary units**: KiB, MiB, GiB, TiB, PiB (powers of 1024)
+
+Examples:
+- `"512MB"` = 512,000,000 bytes
+- `"512MiB"` = 536,870,912 bytes
+- `"4GB"` = 4,000,000,000 bytes
+- `"4GiB"` = 4,294,967,296 bytes
+
+## Use Cases
+
+1. **GPU training** - Allocate GPUs for deep learning
+2. **Memory-intensive processing** - Handle large datasets
+3. **Parallel processing** - Use multiple CPUs
+4. **Node selection** - Run on specific hardware
+5. **Autoscaling deployments** - Configure scaling behavior
+6. **Cost optimization** - Right-size resources
+7. **Serverless workloads** - Scale to zero when idle
+
+## Important Notes
+
+- Resource settings are respected by orchestrators that support resource allocation (Kubernetes, cloud providers)
+- Local orchestrators may ignore resource settings
+- Actual resource availability depends on your infrastructure
+- GPU count of 0 means no GPU allocation (different from None)
+- For deployments, combine with autoscaling settings for optimal performance
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@step" href="./step" icon="code">
+    Configure step resources
+  </Card>
+  <Card title="@pipeline" href="./pipeline" icon="code">
+    Learn about pipelines
+  </Card>
+</CardGroup>

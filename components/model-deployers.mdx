@@ -1,0 +1,494 @@
+---
+title: Model Deployers
+description: Deploy models for online inference and serving
+---
+
+# Model Deployers
+
+Model deployers are stack components responsible for online model serving. They enable you to deploy machine learning models as managed web services and provide access through API endpoints.
+
+## Overview
+
+Online serving is the process of hosting and loading machine learning models as part of a managed web service and providing access to the models through an API endpoint like HTTP or REST. Once deployed, you can send inference requests to the model through the web service's API and receive fast, low-latency responses.
+
+## What Model Deployers Do
+
+A model deployer component:
+- Deploys trained models to a serving infrastructure
+- Manages the lifecycle of deployed models (deploy, update, delete)
+- Provides API endpoints for inference
+- Acts as a registry for deployed models
+- Handles scaling and load balancing
+- Monitors model performance and health
+
+## Available Model Deployers
+
+### BentoML Model Deployer
+
+Deploy models using BentoML, a framework for building and deploying ML services.
+
+**Installation:**
+```bash
+zenml integration install bentoml
+```
+
+**Configuration:**
+```bash
+zenml model-deployer register bentoml_deployer --flavor=bentoml
+```
+
+**Features:**
+- Multi-framework support (scikit-learn, PyTorch, TensorFlow, etc.)
+- High-performance serving
+- Built-in monitoring and logging
+- Easy containerization
+- Production-ready deployments
+
+**Use cases:**
+- General-purpose model serving
+- Multi-model deployments
+- Custom inference logic
+- Microservices architecture
+
+**Example:**
+```python
+from zenml import pipeline, step
+from zenml.integrations.bentoml.steps import bento_builder_step, bentoml_deployer_step
+from zenml.integrations.bentoml.services import BentoMLDeploymentService
+
+@step
+def predict_with_deployment(service: BentoMLDeploymentService) -> dict:
+    # Make predictions using the deployed service
+    prediction = service.predict({"data": [[1, 2, 3, 4]]})
+    return prediction
+
+@pipeline
+def deploy_pipeline():
+    model = train_model()
+    bento = bento_builder_step(model=model)
+    service = bentoml_deployer_step(bento=bento)
+    predictions = predict_with_deployment(service=service)
+```
+
+### MLflow Model Deployer
+
+Deploy models using MLflow's model serving capabilities.
+
+**Installation:**
+```bash
+zenml integration install mlflow
+```
+
+**Configuration:**
+```bash
+zenml model-deployer register mlflow_deployer --flavor=mlflow
+```
+
+**Features:**
+- Integrated with MLflow tracking
+- Model versioning and registry
+- Multiple deployment targets
+- REST API endpoints
+- Batch and real-time inference
+
+**Use cases:**
+- MLflow-based workflows
+- Multi-framework deployments
+- Model versioning and lineage
+- Experimentation platforms
+
+### Seldon Core Model Deployer
+
+Deploy models on Kubernetes using Seldon Core.
+
+**Installation:**
+```bash
+zenml integration install seldon
+```
+
+**Configuration:**
+```bash
+zenml model-deployer register seldon_deployer --flavor=seldon \
+  --kubernetes_context=<context> \
+  --kubernetes_namespace=seldon
+```
+
+**Requirements:**
+- Kubernetes cluster with Seldon Core installed
+- Container registry
+- Kubernetes context configured
+
+**Features:**
+- Advanced deployment patterns (A/B testing, canary)
+- Explainability and outlier detection
+- Multi-armed bandits
+- Request logging and monitoring
+- GPU support
+
+**Use cases:**
+- Kubernetes-native deployments
+- Production ML platforms
+- Advanced deployment strategies
+- High-scale serving
+
+### KServe Model Deployer
+
+Deploy models using KServe (formerly KFServing) on Kubernetes.
+
+**Installation:**
+```bash
+zenml integration install kserve
+```
+
+**Configuration:**
+```bash
+zenml model-deployer register kserve_deployer --flavor=kserve \
+  --kubernetes_context=<context> \
+  --base_url=http://kserve.example.com
+```
+
+**Requirements:**
+- Kubernetes cluster with KServe installed
+- Istio or other ingress controller
+- Container registry
+
+**Features:**
+- Serverless inference
+- Autoscaling with scale-to-zero
+- Canary rollouts
+- Multi-framework support
+- GPU acceleration
+- Explainability features
+
+**Use cases:**
+- Serverless ML deployments
+- Auto-scaling requirements
+- Multi-model serving
+- Production Kubernetes environments
+
+### Cloud Model Deployers
+
+<CardGroup cols={2}>
+  <Card title="Vertex AI Deployer" icon="google">
+    Deploy models to Google Cloud Vertex AI
+    
+    ```bash
+    zenml integration install gcp
+    zenml model-deployer register vertex_deployer \
+      --flavor=vertex \
+      --project=my-project \
+      --region=us-central1
+    ```
+  </Card>
+  
+  <Card title="SageMaker Deployer" icon="aws">
+    Deploy models to AWS SageMaker Endpoints
+    
+    ```bash
+    zenml integration install aws
+    zenml model-deployer register sagemaker_deployer \
+      --flavor=sagemaker \
+      --region=us-east-1
+    ```
+  </Card>
+  
+  <Card title="Azure ML Deployer" icon="microsoft">
+    Deploy models to Azure Machine Learning
+    
+    ```bash
+    zenml integration install azure
+    zenml model-deployer register azure_deployer \
+      --flavor=azureml
+    ```
+  </Card>
+  
+  <Card title="Databricks Deployer" icon="database">
+    Deploy models to Databricks Model Serving
+    
+    ```bash
+    zenml integration install databricks
+    zenml model-deployer register databricks_deployer \
+      --flavor=databricks
+    ```
+  </Card>
+</CardGroup>
+
+## Choosing a Model Deployer
+
+| Deployer | Best For | Deployment Type | Scaling |
+|----------|----------|-----------------|----------|
+| **BentoML** | Multi-framework, flexibility | Container/Cloud | Manual/Auto |
+| **MLflow** | MLflow workflows | Local/Cloud | Manual |
+| **Seldon** | Kubernetes, advanced patterns | Kubernetes | Auto |
+| **KServe** | Serverless, auto-scaling | Kubernetes | Serverless |
+| **Vertex AI** | GCP infrastructure | Managed Cloud | Auto |
+| **SageMaker** | AWS infrastructure | Managed Cloud | Auto |
+| **Azure ML** | Azure infrastructure | Managed Cloud | Auto |
+
+## Deployment Workflow
+
+A typical model deployment workflow:
+
+```python
+from zenml import pipeline, step
+from zenml.client import Client
+
+@step
+def train_model() -> Model:
+    # Train and return your model
+    model = train(...)
+    return model
+
+@step
+def deploy_model(model: Model) -> None:
+    # Deploy using the active stack's model deployer
+    from zenml.integrations.bentoml.steps import bentoml_deployer_step
+    
+    service = bentoml_deployer_step(
+        model=model,
+        model_name="my_classifier",
+        port=3000,
+    )
+    
+    print(f"Model deployed at: {service.prediction_url}")
+
+@pipeline
+def deployment_pipeline():
+    model = train_model()
+    deploy_model(model)
+```
+
+## Managing Deployments
+
+### List Deployed Models
+
+```python
+from zenml.client import Client
+
+client = Client()
+model_deployer = client.active_stack.model_deployer
+
+# List all deployed models
+services = model_deployer.find_model_server()
+
+for service in services:
+    print(f"Model: {service.config.model_name}")
+    print(f"Status: {service.status.state}")
+    print(f"URL: {service.prediction_url}")
+```
+
+### Get Deployment Status
+
+```python
+# Get a specific deployment
+service = model_deployer.find_model_server(
+    pipeline_name="deployment_pipeline",
+    pipeline_step_name="deploy_model",
+    running=True
+)[0]
+
+if service.is_running:
+    print(f"Service is running at {service.prediction_url}")
+else:
+    print(f"Service status: {service.status.state}")
+```
+
+### Stop a Deployment
+
+```python
+# Stop a running deployment
+service.stop(timeout=60)
+
+# Or delete it completely
+model_deployer.delete_service(service.uuid)
+```
+
+## Making Predictions
+
+### REST API Predictions
+
+```python
+import requests
+
+# Get the prediction endpoint
+service = model_deployer.find_model_server(...)[0]
+prediction_url = service.prediction_url
+
+# Make a prediction request
+response = requests.post(
+    prediction_url,
+    json={"data": [[1, 2, 3, 4]]}
+)
+
+prediction = response.json()
+print(f"Prediction: {prediction}")
+```
+
+### Python Client Predictions
+
+```python
+from zenml.integrations.bentoml.services import BentoMLDeploymentService
+
+@step
+def make_predictions(service: BentoMLDeploymentService) -> list:
+    # Use the service directly in a pipeline step
+    predictions = service.predict({"data": [[1, 2, 3, 4]]})
+    return predictions
+```
+
+## Continuous Deployment
+
+Implement continuous deployment with scheduled pipelines:
+
+```python
+from zenml import pipeline
+from zenml.config import Schedule
+
+@pipeline(
+    enable_cache=False,
+    schedule=Schedule(cron_expression="0 0 * * 0")  # Weekly
+)
+def continuous_deployment_pipeline():
+    # Load latest data
+    data = load_data()
+    
+    # Train model
+    model = train_model(data)
+    
+    # Evaluate model
+    metrics = evaluate_model(model, data)
+    
+    # Deploy if metrics are good
+    deploy_if_metrics_good(model, metrics)
+```
+
+## Model Versioning
+
+Track deployed model versions:
+
+```python
+from zenml import step, Model
+
+@step(model=Model(name="sentiment_classifier"))
+def deploy_model(model: Any) -> None:
+    # Deploy with version tracking
+    service = deploy(
+        model=model,
+        model_name="sentiment_classifier",
+        version="1.2.0",
+    )
+    
+    # ZenML automatically tracks the deployment
+    # as part of the model version
+```
+
+## Monitoring Deployments
+
+### Health Checks
+
+```python
+@step
+def monitor_deployment() -> dict:
+    service = model_deployer.find_model_server(...)[0]
+    
+    # Check health
+    health = service.get_healthcheck()
+    
+    # Get logs
+    logs = service.get_logs()
+    
+    return {"health": health, "logs": logs}
+```
+
+### Performance Metrics
+
+Many deployers provide built-in monitoring:
+- Request latency
+- Throughput (requests/second)
+- Error rates
+- Resource utilization (CPU, memory, GPU)
+
+Integrate with monitoring tools:
+- Prometheus for metrics collection
+- Grafana for visualization
+- Cloud provider monitoring (CloudWatch, Stackdriver, Azure Monitor)
+
+## Security Best Practices
+
+### Authentication
+
+```python
+# Configure authentication for deployments
+from zenml.integrations.bentoml.flavors import BentoMLDeploymentConfig
+
+config = BentoMLDeploymentConfig(
+    model_name="my_model",
+    auth_enabled=True,
+    api_token="<secret-token>",
+)
+```
+
+### Network Security
+
+- Deploy in private networks/VPCs
+- Use API gateways for rate limiting
+- Enable TLS/SSL for endpoints
+- Implement request validation
+- Use service meshes (Istio) for Kubernetes deployments
+
+### Access Control
+
+- Use IAM roles for cloud deployments
+- Implement RBAC for Kubernetes deployments
+- Rotate API tokens regularly
+- Audit access logs
+
+## Troubleshooting
+
+### Deployment Failures
+
+```python
+# Check service status
+service = model_deployer.find_model_server(...)[0]
+print(service.status)
+print(service.status.last_error)
+
+# Get detailed logs
+logs = service.get_logs()
+for log in logs:
+    print(log)
+```
+
+### Prediction Errors
+
+```python
+# Validate input format
+import json
+
+test_input = {"data": [[1, 2, 3, 4]]}
+print(json.dumps(test_input))  # Check JSON serialization
+
+# Test locally before deploying
+prediction = model.predict(test_input["data"])
+print(prediction)
+```
+
+### Performance Issues
+
+- Check resource limits (CPU, memory, GPU)
+- Monitor request queue length
+- Enable batching for batch predictions
+- Scale up replicas/instances
+- Use GPU acceleration if available
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Experiment Trackers" icon="chart-line" href="/components/experiment-trackers">
+    Track model training experiments
+  </Card>
+  
+  <Card title="Step Operators" icon="microchip" href="/components/step-operators">
+    Run steps on specialized infrastructure
+  </Card>
+</CardGroup>

@@ -1,0 +1,477 @@
+---
+title: "Stack"
+description: "ZenML Stack class representing a collection of stack components for running ML pipelines."
+---
+
+## Overview
+
+The `Stack` class represents a complete ZenML stack - a collection of stack components that together define the infrastructure and tooling needed to run ML pipelines. Each stack consists of required components (orchestrator, artifact store) and optional components (container registry, experiment tracker, etc.).
+
+## Class Definition
+
+```python
+from zenml.stack import Stack
+```
+
+## Stack Components
+
+A stack is composed of the following components:
+
+### Required Components
+
+- **Orchestrator**: Coordinates pipeline execution
+- **Artifact Store**: Stores pipeline artifacts and outputs
+
+### Optional Components
+
+- **Container Registry**: Stores Docker images for containerized execution
+- **Step Operator**: Executes individual steps on specialized infrastructure
+- **Experiment Tracker**: Tracks experiments and metrics
+- **Model Deployer**: Deploys trained models
+- **Feature Store**: Manages and serves features
+- **Alerter**: Sends alerts and notifications
+- **Annotator**: Manages data annotation
+- **Data Validator**: Validates data quality
+- **Image Builder**: Builds Docker images
+- **Model Registry**: Manages model versions
+- **Deployer**: Deploys pipelines to production
+- **Log Store**: Stores and manages logs
+
+## Initialization
+
+```python
+def __init__(
+    self,
+    id: UUID,
+    name: str,
+    *,
+    environment: Optional[Dict[str, str]] = None,
+    secrets: Optional[List[UUID]] = None,
+    orchestrator: BaseOrchestrator,
+    artifact_store: BaseArtifactStore,
+    container_registry: Optional[BaseContainerRegistry] = None,
+    # ... other optional components
+):
+```
+
+<ParamField path="id" type="UUID" required>
+  Unique ID of the stack.
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Name of the stack.
+</ParamField>
+
+<ParamField path="environment" type="Dict[str, str]">
+  Environment variables to set when running on this stack.
+</ParamField>
+
+<ParamField path="secrets" type="List[UUID]">
+  Secrets to make available as environment variables.
+</ParamField>
+
+<ParamField path="orchestrator" type="BaseOrchestrator" required>
+  The orchestrator component.
+</ParamField>
+
+<ParamField path="artifact_store" type="BaseArtifactStore" required>
+  The artifact store component.
+</ParamField>
+
+<ParamField path="container_registry" type="BaseContainerRegistry">
+  Optional container registry component.
+</ParamField>
+
+<ParamField path="step_operator" type="BaseStepOperator">
+  Optional step operator component.
+</ParamField>
+
+<ParamField path="experiment_tracker" type="BaseExperimentTracker">
+  Optional experiment tracker component.
+</ParamField>
+
+<ParamField path="model_deployer" type="BaseModelDeployer">
+  Optional model deployer component.
+</ParamField>
+
+## Class Methods
+
+### from_model
+
+```python
+@classmethod
+def from_model(cls, stack_model: StackResponse) -> Stack:
+    """Creates a Stack instance from a StackResponse."""
+```
+
+<ParamField path="stack_model" type="StackResponse" required>
+  The stack model to create the Stack from.
+</ParamField>
+
+<ResponseField name="return" type="Stack">
+  The created Stack instance.
+</ResponseField>
+
+<Note>
+  This method includes caching to avoid redundant database calls for the same stack.
+</Note>
+
+### from_components
+
+```python
+@classmethod
+def from_components(
+    cls,
+    id: UUID,
+    name: str,
+    components: Dict[StackComponentType, StackComponent],
+    environment: Optional[Dict[str, str]] = None,
+    secrets: Optional[List[UUID]] = None,
+) -> Stack:
+    """Creates a stack from a dictionary of components."""
+```
+
+<ParamField path="id" type="UUID" required>
+  Unique ID of the stack.
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Name of the stack.
+</ParamField>
+
+<ParamField path="components" type="Dict[StackComponentType, StackComponent]" required>
+  Dictionary mapping component types to component instances.
+</ParamField>
+
+<ResponseField name="return" type="Stack">
+  A stack instance consisting of the given components.
+</ResponseField>
+
+## Properties
+
+### id
+
+```python
+@property
+def id(self) -> UUID:
+    """The ID of the stack."""
+```
+
+### name
+
+```python
+@property
+def name(self) -> str:
+    """The name of the stack."""
+```
+
+### components
+
+```python
+@property
+def components(self) -> Dict[StackComponentType, StackComponent]:
+    """All components of the stack."""
+```
+
+<ResponseField name="return" type="Dict[StackComponentType, StackComponent]">
+  Dictionary of all stack components, keyed by component type.
+</ResponseField>
+
+### orchestrator
+
+```python
+@property
+def orchestrator(self) -> BaseOrchestrator:
+    """The orchestrator of the stack."""
+```
+
+### artifact_store
+
+```python
+@property
+def artifact_store(self) -> BaseArtifactStore:
+    """The artifact store of the stack."""
+```
+
+### container_registry
+
+```python
+@property
+def container_registry(self) -> Optional[BaseContainerRegistry]:
+    """The container registry of the stack."""
+```
+
+### requires_remote_server
+
+```python
+@property
+def requires_remote_server(self) -> bool:
+    """Whether the stack requires a remote ZenML server."""
+```
+
+<ResponseField name="return" type="bool">
+  True if any code executes remotely (remote orchestrator or step operator).
+</ResponseField>
+
+### environment
+
+```python
+@property
+def environment(self) -> Dict[str, str]:
+    """Environment variables to set when running on this stack."""
+```
+
+### secrets
+
+```python
+@property
+def secrets(self) -> List[UUID]:
+    """Secrets to set as environment variables."""
+```
+
+## Core Methods
+
+### validate
+
+```python
+def validate(self, fail_if_secrets_missing: bool = False) -> None:
+    """Validates the stack configuration."""
+```
+
+<ParamField path="fail_if_secrets_missing" type="bool" default="False">
+  If True, raises an error if secrets are missing. Otherwise logs a warning.
+</ParamField>
+
+Validation checks:
+- Stack has required image builder if components need it
+- All component validators pass
+- Required secrets exist
+
+### submit_pipeline
+
+```python
+def submit_pipeline(
+    self,
+    snapshot: PipelineSnapshotResponse,
+    placeholder_run: Optional[PipelineRunResponse] = None,
+) -> None:
+    """Submits a pipeline for execution on this stack."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotResponse" required>
+  The pipeline snapshot to submit.
+</ParamField>
+
+<ParamField path="placeholder_run" type="PipelineRunResponse">
+  Optional placeholder run for the pipeline.
+</ParamField>
+
+### deploy_pipeline
+
+```python
+def deploy_pipeline(
+    self,
+    snapshot: PipelineSnapshotResponse,
+    deployment_name: str,
+    timeout: Optional[int] = None,
+) -> DeploymentResponse:
+    """Deploys a pipeline on this stack."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotResponse" required>
+  The pipeline snapshot to deploy.
+</ParamField>
+
+<ParamField path="deployment_name" type="str" required>
+  Name for the deployment.
+</ParamField>
+
+<ParamField path="timeout" type="int">
+  Maximum time in seconds to wait for deployment.
+</ParamField>
+
+<ResponseField name="return" type="DeploymentResponse">
+  The deployment response.
+</ResponseField>
+
+### prepare_step_run
+
+```python
+def prepare_step_run(self, info: StepRunInfo) -> None:
+    """Prepares running a step."""
+```
+
+<ParamField path="info" type="StepRunInfo" required>
+  Information about the step that will be executed.
+</ParamField>
+
+### cleanup_step_run
+
+```python
+def cleanup_step_run(self, info: StepRunInfo, step_failed: bool) -> None:
+    """Cleans up resources after step execution."""
+```
+
+<ParamField path="info" type="StepRunInfo" required>
+  Information about the step that was executed.
+</ParamField>
+
+<ParamField path="step_failed" type="bool" required>
+  Whether the step failed.
+</ParamField>
+
+## Utility Methods
+
+### requirements
+
+```python
+def requirements(
+    self,
+    exclude_components: Optional[AbstractSet[StackComponentType]] = None,
+) -> Set[str]:
+    """Get PyPI requirements for the stack."""
+```
+
+<ParamField path="exclude_components" type="AbstractSet[StackComponentType]">
+  Component types to exclude from requirements.
+</ParamField>
+
+<ResponseField name="return" type="Set[str]">
+  Set of PyPI package requirements.
+</ResponseField>
+
+### apt_packages
+
+```python
+@property
+def apt_packages(self) -> List[str]:
+    """List of APT package requirements for the stack."""
+```
+
+### get_docker_builds
+
+```python
+def get_docker_builds(
+    self,
+    snapshot: PipelineSnapshotBase
+) -> List[BuildConfiguration]:
+    """Gets Docker builds required for the stack."""
+```
+
+<ParamField path="snapshot" type="PipelineSnapshotBase" required>
+  The pipeline snapshot for which to get builds.
+</ParamField>
+
+<ResponseField name="return" type="List[BuildConfiguration]">
+  List of required Docker build configurations.
+</ResponseField>
+
+### get_step_run_metadata
+
+```python
+def get_step_run_metadata(
+    self,
+    info: StepRunInfo
+) -> Dict[UUID, Dict[str, MetadataType]]:
+    """Get component-specific metadata for a step run."""
+```
+
+<ParamField path="info" type="StepRunInfo" required>
+  Information about the step that was executed.
+</ParamField>
+
+<ResponseField name="return" type="Dict[UUID, Dict[str, MetadataType]]">
+  Dictionary mapping component IDs to their metadata.
+</ResponseField>
+
+## Usage Example
+
+```python
+from zenml.client import Client
+from zenml.stack import Stack
+
+# Get the active stack
+client = Client()
+active_stack = client.active_stack
+
+print(f"Stack name: {active_stack.name}")
+print(f"Orchestrator: {active_stack.orchestrator.name}")
+print(f"Artifact store: {active_stack.artifact_store.name}")
+
+# Check if stack has certain components
+if active_stack.experiment_tracker:
+    print(f"Experiment tracker: {active_stack.experiment_tracker.name}")
+
+if active_stack.container_registry:
+    print(f"Container registry: {active_stack.container_registry.name}")
+
+# Validate stack
+active_stack.validate(fail_if_secrets_missing=True)
+
+# Get all components
+for component_type, component in active_stack.components.items():
+    print(f"{component_type.value}: {component.name}")
+
+# Check stack requirements
+print(f"Requires remote server: {active_stack.requires_remote_server}")
+print(f"PyPI requirements: {active_stack.requirements()}")
+print(f"APT packages: {active_stack.apt_packages}")
+```
+
+## Creating a Custom Stack
+
+```python
+from uuid import uuid4
+from zenml.client import Client
+from zenml.enums import StackComponentType
+
+client = Client()
+
+# Create a new stack from existing components
+stack = client.create_stack(
+    name="my_custom_stack",
+    components={
+        StackComponentType.ORCHESTRATOR: "local_orchestrator",
+        StackComponentType.ARTIFACT_STORE: "local_artifact_store",
+        StackComponentType.CONTAINER_REGISTRY: "my_registry",
+        StackComponentType.EXPERIMENT_TRACKER: "mlflow_tracker",
+    }
+)
+
+# Set as active stack
+client.activate_stack(stack.id)
+
+# Verify
+print(f"Active stack: {client.active_stack_model.name}")
+```
+
+## Validation Example
+
+```python
+from zenml.stack import Stack
+from zenml.exceptions import StackValidationError
+
+try:
+    stack.validate(fail_if_secrets_missing=True)
+    print("Stack validation passed!")
+except StackValidationError as e:
+    print(f"Stack validation failed: {e}")
+    # Handle validation error
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="StackComponent" href="/api/stack-component" icon="puzzle-piece">
+    Learn about individual stack components
+  </Card>
+  <Card title="BaseOrchestrator" href="/api/base-orchestrator" icon="network-wired">
+    Understand the orchestrator component
+  </Card>
+  <Card title="Stacks Guide" href="/stack-components" icon="book">
+    Complete guide to ZenML stacks
+  </Card>
+  <Card title="Stack Switching" href="/how-to/stack-deployment/switch-stacks" icon="repeat">
+    Learn how to switch between stacks
+  </Card>
+</CardGroup>

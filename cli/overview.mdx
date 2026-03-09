@@ -1,0 +1,220 @@
+---
+title: CLI Overview
+description: Learn how to use the ZenML command-line interface for pipeline orchestration and MLOps workflows.
+---
+
+The ZenML CLI is the primary interface for interacting with ZenML from your terminal. It provides commands to manage pipelines, stacks, integrations, and more.
+
+## Getting Started
+
+Check your ZenML version:
+
+```bash
+zenml version
+```
+
+Get help on any command:
+
+```bash
+zenml --help
+zenml <command> --help
+zenml <command> <subcommand> --help
+```
+
+## Command Categories
+
+ZenML CLI commands are organized into several categories:
+
+<CardGroup cols={2}>
+  <Card title="Pipeline Commands" icon="diagram-project" href="/cli/pipeline">
+    Manage pipelines, runs, builds, and deployments
+  </Card>
+  <Card title="Stack Commands" icon="layer-group" href="/cli/stack">
+    Configure and manage your MLOps stacks
+  </Card>
+  <Card title="Integration Commands" icon="puzzle-piece" href="/cli/integration">
+    Install and manage third-party integrations
+  </Card>
+  <Card title="Deployment Commands" icon="rocket" href="/cli/deployment">
+    Deploy and manage pipeline deployments
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Using the Help Flag
+
+Every command supports the `--help` flag to display detailed usage information:
+
+```bash
+zenml artifact-store register --help
+```
+
+### Understanding Concepts
+
+Use the `explain` subcommand to learn about ZenML concepts:
+
+```bash
+zenml artifact-store explain
+zenml orchestrator explain
+```
+
+### Filtering List Commands
+
+Many list commands support powerful filtering options. Use `--help` to see available filters:
+
+```bash
+zenml orchestrator list --help
+```
+
+#### Filter by Text Fields
+
+For `TEXT` or `UUID` fields, use these operators:
+
+```bash
+# Contains
+zenml orchestrator list --name "contains:sagemaker"
+
+# Starts with
+zenml pipeline list --name "startswith:training"
+
+# Ends with
+zenml stack list --name "endswith:prod"
+```
+
+#### Filter by Boolean Fields
+
+For `BOOL` fields, use `True` or `False`:
+
+```bash
+zenml stack list --is_shared True
+```
+
+#### Filter by Date Fields
+
+For `DATETIME` fields, use comparison operators with the format `YYYY-MM-DD HH:MM:SS`:
+
+```bash
+# Greater than
+zenml orchestrator list --created "gt:2021-01-01 00:00:00"
+
+# Less than or equal
+zenml pipeline runs list --created "lte:2024-12-31 23:59:59"
+
+# Greater than or equal
+zenml stack list --updated "gte:2024-01-01 00:00:00"
+```
+
+#### Combine Filters
+
+Filters can be combined using `and` and `or` keywords:
+
+```bash
+zenml pipeline runs list --status "running or completed" --created "gte:2024-01-01 00:00:00"
+```
+
+### Sorting Results
+
+Use the `--sort_by` option to sort list command output:
+
+```bash
+# Ascending order
+zenml orchestrator list --sort_by "asc:name"
+
+# Descending order
+zenml pipeline runs list --sort_by "desc:created"
+```
+
+### Output Formats
+
+All list commands support multiple output formats via the `--output` or `-o` flag:
+
+```bash
+# JSON format (for programmatic use)
+zenml stack list --output=json | jq '.items[] | select(.name=="production")'
+
+# CSV format (for spreadsheet analysis)
+zenml pipeline runs list --output=csv > pipeline_runs.csv
+
+# YAML format (for configuration)
+zenml deployment list --output=yaml
+
+# TSV format (for simpler parsing)
+zenml stack list --output=tsv
+
+# Table format (default, human-readable)
+zenml pipeline list --output=table
+```
+
+#### Custom Column Selection
+
+Control which columns to display:
+
+```bash
+zenml stack list --columns=id,name,orchestrator
+zenml pipeline list --columns=id,name --output=json
+```
+
+#### Environment Variables
+
+Set default output preferences:
+
+```bash
+# Set default output format
+export ZENML_DEFAULT_OUTPUT=json
+
+# Set consistent table width
+export ZENML_CLI_COLUMN_WIDTH=120
+```
+
+## Global Options
+
+These options work with most ZenML commands:
+
+| Option | Description |
+|--------|-------------|
+| `--help` | Show help message and exit |
+| `--version`, `-v` | Show ZenML version |
+| `--debug` | Enable debug logging |
+| `--no-color` | Disable colored output |
+
+## Working Without a Repository
+
+Some commands (like `zenml pipeline register` or `zenml pipeline run`) can be executed outside a ZenML repository. When you do this:
+
+- ZenML uses your current working directory as the source root
+- You'll see a warning message suggesting to run `zenml init`
+- The command will still work, but relative imports are resolved from your current directory
+
+<Note>
+For best results, run `zenml init` at your project's source code root before using ZenML commands.
+</Note>
+
+## Component Labels
+
+Many stack components support labels for organization and filtering:
+
+```bash
+# Add labels when registering
+zenml artifact-store register my-store --flavor=s3 -l environment=prod -l team=ml
+
+# Filter by labels
+zenml artifact-store list --label environment=prod
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Initialize Project" icon="folder-plus" href="/cli/init">
+    Set up a new ZenML repository
+  </Card>
+  <Card title="Login to Server" icon="right-to-bracket" href="/cli/login">
+    Connect to ZenML Pro or a self-hosted server
+  </Card>
+  <Card title="Configure Stacks" icon="layer-group" href="/cli/stack">
+    Learn about stack management
+  </Card>
+  <Card title="Run Pipelines" icon="play" href="/cli/pipeline">
+    Execute and manage pipeline runs
+  </Card>
+</CardGroup>

@@ -1,0 +1,509 @@
+---
+title: GCP Vertex AI Integration
+description: Run ZenML pipelines on Google Cloud Vertex AI
+---
+
+The GCP Vertex AI integration provides orchestration, step execution, and experiment tracking using Google Cloud's Vertex AI platform.
+
+<Info>
+  This page covers Vertex AI-specific details. For general GCP setup, see the [GCP Integration](./gcp) page.
+</Info>
+
+## Installation
+
+```bash
+pip install "zenml[gcp]"
+```
+
+This installs:
+- `google-cloud-aiplatform>=1.34.0` - Vertex AI SDK
+- `kfp>=2.6.0` - Kubeflow Pipelines SDK (used by Vertex)
+- `google-cloud-pipeline-components>=2.19.0` - Pre-built components
+- `kubernetes` - Kubernetes Python client
+
+## Components
+
+<CardGroup cols={2}>
+  <Card title="Vertex AI Orchestrator" icon="diagram-project">
+    Execute complete pipelines as Vertex AI Pipelines
+  </Card>
+  <Card title="Vertex AI Step Operator" icon="shoe-prints">
+    Run individual steps as Vertex AI custom jobs
+  </Card>
+  <Card title="Vertex Experiment Tracker" icon="chart-line">
+    Track experiments in Vertex AI Experiments
+  </Card>
+</CardGroup>
+
+## Vertex AI Orchestrator
+
+Runs your complete pipeline as a Vertex AI Pipeline using Kubeflow Pipelines v2.
+
+### Configuration
+
+```bash
+zenml orchestrator register vertex-orch \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1 \
+    --pipeline_root=gs://my-vertex-bucket/pipelines
+```
+
+**Required:**
+- `project` - GCP project ID
+- `location` - GCP region (e.g., `us-central1`, `europe-west1`)
+
+**Optional:**
+- `pipeline_root` - GCS URI for pipeline artifacts
+- `workload_service_account` - Service account for execution
+- `network` - VPC network for private connectivity
+- `encryption_spec_key_name` - Cloud KMS encryption key
+- `private_service_connect` - Private Service Connect endpoint
+
+### Step Settings
+
+Customize steps with `VertexOrchestratorSettings` and `KubernetesPodSettings`:
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.gcp.flavors.vertex_orchestrator_flavor import (
+    VertexOrchestratorSettings,
+)
+from zenml.integrations.kubernetes.pod_settings import KubernetesPodSettings
+
+@step(
+    settings={
+        "orchestrator": VertexOrchestratorSettings(
+            pod_settings=KubernetesPodSettings(
+                # GPU configuration
+                node_selectors={
+                    "cloud.google.com/gke-accelerator": "NVIDIA_TESLA_T4"
+                },
+                resources={
+                    "requests": {
+                        "memory": "16Gi",
+                        "cpu": "4",
+                    },
+                    "limits": {
+                        "memory": "16Gi",
+                        "cpu": "4",
+                        "nvidia.com/gpu": "1",
+                    },
+                },
+                tolerations=[
+                    {
+                        "key": "nvidia.com/gpu",
+                        "operator": "Exists",
+                        "effect": "NoSchedule",
+                    }
+                ],
+                # Volume mounts
+                volumes=[
+                    {
+                        "name": "gcs-fuse",
+                        "emptyDir": {},
+                    }
+                ],
+                volume_mounts=[
+                    {
+                        "name": "gcs-fuse",
+                        "mountPath": "/gcs",
+                    }
+                ],
+            ),
+            # Pipeline-level settings
+            labels={
+                "team": "ml-ops",
+                "project": "recommendation",
+                "environment": "production",
+            },
+            synchronous=True,  # Wait for completion
+        )
+    }
+)
+def train_on_gpu(data: pd.DataFrame) -> Model:
+    # Training code
+    ...
+```
+
+**Available Settings:**
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `pod_settings` | `KubernetesPodSettings` | Kubernetes Pod configuration |
+| `labels` | dict | GCP labels for the pipeline job |
+| `synchronous` | bool | Wait for pipeline completion |
+| `node_selector_constraint` | tuple | (Deprecated) Use `pod_settings.node_selectors` |
+| `custom_job_parameters` | `VertexCustomJobParameters` | Advanced custom job settings |
+
+### Machine Types
+
+Vertex AI uses GCP machine types:
+
+**Standard:**
+- `n1-standard-4` - 4 vCPU, 15 GB RAM
+- `n1-standard-8` - 8 vCPU, 30 GB RAM
+- `n1-standard-16` - 16 vCPU, 60 GB RAM
+
+**High-Memory:**
+- `n1-highmem-4` - 4 vCPU, 26 GB RAM
+- `n1-highmem-8` - 8 vCPU, 52 GB RAM
+- `n1-highmem-16` - 16 vCPU, 104 GB RAM
+
+**High-CPU:**
+- `n1-highcpu-8` - 8 vCPU, 7.2 GB RAM
+- `n1-highcpu-16` - 16 vCPU, 14.4 GB RAM
+
+Specify via resource requests:
+
+```python
+KubernetesPodSettings(
+    resources={
+        "requests": {
+            "cpu": "8",      # n1-standard-8
+            "memory": "30Gi",
+        }
+    }
+)
+```
+
+### GPU Accelerators
+
+**Available GPUs:**
+- `NVIDIA_TESLA_K80` - Legacy, low cost
+- `NVIDIA_TESLA_P4` - Inference optimized
+- `NVIDIA_TESLA_T4` - Good price/performance
+- `NVIDIA_TESLA_V100` - High performance training
+- `NVIDIA_TESLA_P100` - High performance
+- `NVIDIA_TESLA_A100` - Latest, 40GB or 80GB
+
+**GPU Configuration:**
+
+```python
+KubernetesPodSettings(
+    node_selectors={
+        "cloud.google.com/gke-accelerator": "NVIDIA_TESLA_T4",
+    },
+    resources={
+        "limits": {
+            "nvidia.com/gpu": "2",  # Request 2 GPUs
+        }
+    },
+    tolerations=[
+        {
+            "key": "nvidia.com/gpu",
+            "operator": "Exists",
+            "effect": "NoSchedule",
+        }
+    ],
+)
+```
+
+**Check GPU availability by region:**
+- [GPU regions and zones](https://cloud.google.com/compute/docs/gpus/gpu-regions-zones)
+
+### Custom Job Parameters
+
+Advanced configuration for Vertex AI custom jobs:
+
+```python
+from zenml.integrations.gcp.vertex_custom_job_parameters import (
+    VertexCustomJobParameters,
+)
+
+VertexOrchestratorSettings(
+    custom_job_parameters=VertexCustomJobParameters(
+        worker_pool_specs=[
+            {
+                "machine_spec": {
+                    "machine_type": "n1-standard-8",
+                    "accelerator_type": "NVIDIA_TESLA_T4",
+                    "accelerator_count": 1,
+                },
+                "replica_count": 1,
+                "container_spec": {
+                    "image_uri": "gcr.io/my-project/my-image:latest",
+                },
+            }
+        ],
+        scheduling={
+            "timeout": "3600s",
+            "restart_job_on_worker_restart": False,
+        },
+        service_account="my-sa@my-project.iam.gserviceaccount.com",
+        network="projects/my-project/global/networks/my-vpc",
+        enable_web_access=True,  # SSH access
+    ),
+)
+```
+
+## Vertex AI Step Operator
+
+Runs individual steps as Vertex AI custom jobs.
+
+### Configuration
+
+```bash
+zenml step-operator register vertex-step-op \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1 \
+    --service_account=vertex-sa@my-gcp-project.iam.gserviceaccount.com
+```
+
+### Usage
+
+```python
+from zenml import step, pipeline
+
+@step(step_operator="vertex-step-op")
+def train_on_vertex(data: pd.DataFrame) -> Model:
+    # Runs on Vertex AI
+    ...
+
+@step
+def preprocess_locally(raw_data: pd.DataFrame) -> pd.DataFrame:
+    # Runs locally
+    ...
+
+@pipeline
+def hybrid_pipeline():
+    data = preprocess_locally(...)
+    model = train_on_vertex(data)
+```
+
+## Vertex AI Experiments
+
+Track experiments with Vertex AI Experiments.
+
+### Configuration
+
+```bash
+zenml experiment-tracker register vertex-experiments \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1
+```
+
+### Usage
+
+```python
+from zenml import step
+from zenml.client import Client
+
+experiment_tracker = Client().active_stack.experiment_tracker
+
+@step(experiment_tracker="vertex-experiments")
+def train_model(data: pd.DataFrame) -> Model:
+    # Log parameters
+    experiment_tracker.log_params({
+        "learning_rate": 0.001,
+        "batch_size": 32,
+        "epochs": 10,
+    })
+    
+    # Training loop
+    for epoch in range(10):
+        loss = train_epoch(model, data)
+        accuracy = evaluate(model, val_data)
+        
+        # Log metrics
+        experiment_tracker.log_metrics(
+            {"loss": loss, "accuracy": accuracy},
+            step=epoch,
+        )
+    
+    return model
+```
+
+### Viewing Experiments
+
+View experiments in the Vertex AI Console:
+1. Go to Vertex AI > Experiments
+2. Select your experiment
+3. Compare runs and metrics
+4. Visualize training curves
+
+## Service Account Setup
+
+Create a service account with required permissions:
+
+```bash
+# Create service account
+gcloud iam service-accounts create vertex-sa \
+    --display-name="Vertex AI ZenML Service Account"
+
+# Grant Vertex AI User role
+gcloud projects add-iam-policy-binding my-gcp-project \
+    --member="serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+
+# Grant Storage Admin role (for GCS artifacts)
+gcloud projects add-iam-policy-binding my-gcp-project \
+    --member="serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com" \
+    --role="roles/storage.objectAdmin"
+
+# Grant Artifact Registry Reader role
+gcloud projects add-iam-policy-binding my-gcp-project \
+    --member="serviceAccount:vertex-sa@my-gcp-project.iam.gserviceaccount.com" \
+    --role="roles/artifactregistry.reader"
+
+# Create and download key
+gcloud iam service-accounts keys create vertex-sa-key.json \
+    --iam-account=vertex-sa@my-gcp-project.iam.gserviceaccount.com
+```
+
+**Required IAM Roles:**
+- `roles/aiplatform.user` - Create and manage Vertex AI resources
+- `roles/storage.objectAdmin` - Read/write GCS artifacts
+- `roles/artifactregistry.reader` - Pull container images
+
+## Complete Example
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.gcp.flavors.vertex_orchestrator_flavor import (
+    VertexOrchestratorSettings,
+)
+from zenml.integrations.kubernetes.pod_settings import KubernetesPodSettings
+import pandas as pd
+
+@step
+def load_data() -> pd.DataFrame:
+    return pd.read_csv("gs://my-bucket/data.csv")
+
+@step(
+    settings={
+        "orchestrator": VertexOrchestratorSettings(
+            pod_settings=KubernetesPodSettings(
+                resources={
+                    "requests": {"cpu": "2", "memory": "8Gi"},
+                }
+            ),
+            labels={"stage": "preprocessing"},
+        )
+    }
+)
+def preprocess_data(data: pd.DataFrame) -> pd.DataFrame:
+    return data.dropna()
+
+@step(
+    experiment_tracker="vertex-experiments",
+    settings={
+        "orchestrator": VertexOrchestratorSettings(
+            pod_settings=KubernetesPodSettings(
+                node_selectors={
+                    "cloud.google.com/gke-accelerator": "NVIDIA_TESLA_T4",
+                },
+                resources={
+                    "requests": {"cpu": "4", "memory": "16Gi"},
+                    "limits": {"nvidia.com/gpu": "1"},
+                },
+            ),
+            labels={"stage": "training", "model": "v2"},
+        )
+    }
+)
+def train_model(data: pd.DataFrame) -> Model:
+    from zenml.client import Client
+    
+    tracker = Client().active_stack.experiment_tracker
+    tracker.log_params({"learning_rate": 0.001})
+    
+    # Training code
+    model = train(...)
+    
+    tracker.log_metrics({"accuracy": 0.95})
+    return model
+
+@pipeline
+def training_pipeline():
+    data = load_data()
+    processed = preprocess_data(data)
+    model = train_model(processed)
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Workload Identity">
+    When running from GKE, use Workload Identity instead of key files:
+    
+    ```bash
+    gcloud iam service-accounts add-iam-policy-binding \
+        vertex-sa@my-gcp-project.iam.gserviceaccount.com \
+        --role=roles/iam.workloadIdentityUser \
+        --member="serviceAccount:my-gcp-project.svc.id.goog[default/zenml]"
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Private GKE and VPC">
+    Use private networking for security:
+    
+    ```bash
+    zenml orchestrator register vertex-orch \
+        --network=projects/my-gcp-project/global/networks/my-vpc \
+        --private_service_connect=projects/my-gcp-project/regions/us-central1/networkAttachments/my-psc
+    ```
+  </Accordion>
+
+  <Accordion title="Use Customer-Managed Encryption">
+    Encrypt data at rest with CMEK:
+    
+    ```bash
+    zenml orchestrator register vertex-orch \
+        --encryption_spec_key_name=projects/my-gcp-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key
+    ```
+  </Accordion>
+
+  <Accordion title="Label Resources for Cost Tracking">
+    Use labels for billing analysis:
+    
+    ```python
+    VertexOrchestratorSettings(
+        labels={
+            "project": "recommendation",
+            "team": "ml-ops",
+            "environment": "production",
+            "cost-center": "engineering",
+        }
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Monitoring
+
+**View Pipeline Runs:**
+
+1. Go to Vertex AI Console > Pipelines
+2. Select your pipeline
+3. View execution DAG and logs
+4. Click steps to see details
+
+**Cloud Logging:**
+
+```bash
+# View logs for a specific run
+gcloud logging read \
+    "resource.type=aiplatform.googleapis.com/PipelineJob" \
+    --limit 50 \
+    --format json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="GCP Integration" href="./gcp">
+    General GCP integration guide
+  </Card>
+  <Card title="Kubeflow Integration" href="./kubeflow">
+    Compare with Kubeflow Pipelines
+  </Card>
+  <Card title="Experiment Tracking" href="../stack-components/experiment-trackers">
+    Learn about experiment tracking
+  </Card>
+  <Card title="Vertex AI Docs" href="https://cloud.google.com/vertex-ai/docs">
+    Official Vertex AI documentation
+  </Card>
+</CardGroup>

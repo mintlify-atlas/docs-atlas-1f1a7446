@@ -1,0 +1,198 @@
+---
+title: "ArtifactConfig"
+description: "Configure artifact properties in step outputs"
+icon: "box"
+---
+
+The `ArtifactConfig` class is used to define various properties for step output artifacts.
+
+## Signature
+
+```python
+ArtifactConfig(
+    name: Optional[str] = None,
+    version: Optional[Union[str, int]] = None,
+    tags: Optional[List[str]] = None,
+    run_metadata: Optional[Dict[str, MetadataType]] = None,
+    artifact_type: Optional[ArtifactType] = None,
+)
+```
+
+## Parameters
+
+<ParamField path="name" type="str" optional>
+  The name of the artifact. Can be a static string like `"my_artifact"` or a dynamic string with placeholders like `"data_{date}_{time}_{custom}"`. For custom placeholders, provide values in the `substitutions` argument of the step decorator or `with_options()`.
+</ParamField>
+
+<ParamField path="version" type="Union[str, int]" optional>
+  The version of the artifact.
+</ParamField>
+
+<ParamField path="tags" type="List[str]" optional>
+  Tags to associate with the artifact.
+</ParamField>
+
+<ParamField path="run_metadata" type="Dict[str, MetadataType]" optional>
+  Metadata to add to the artifact.
+</ParamField>
+
+<ParamField path="artifact_type" type="ArtifactType" optional>
+  Optional type of the artifact. If not given, the type specified by the materializer is used. Available types include: `DATA`, `MODEL`, `SERVICE`, `SCHEMA`, etc.
+</ParamField>
+
+## Examples
+
+### Basic Artifact Configuration
+
+```python
+from typing import Annotated
+from zenml import step, ArtifactConfig
+import pandas as pd
+
+@step
+def load_data() -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(name="raw_data", tags=["input", "v1"])
+]:
+    return pd.read_csv("data.csv")
+```
+
+### Multiple Outputs with Configuration
+
+```python
+from typing import Annotated, Tuple
+from zenml import step, ArtifactConfig
+from zenml.enums import ArtifactType
+import pandas as pd
+
+@step
+def split_data(df: pd.DataFrame) -> Tuple[
+    Annotated[
+        pd.DataFrame,
+        ArtifactConfig(
+            name="train_dataset",
+            tags=["training"],
+            artifact_type=ArtifactType.DATA
+        )
+    ],
+    Annotated[
+        pd.DataFrame,
+        ArtifactConfig(
+            name="test_dataset",
+            tags=["testing"],
+            artifact_type=ArtifactType.DATA
+        )
+    ],
+]:
+    train = df.sample(frac=0.8)
+    test = df.drop(train.index)
+    return train, test
+```
+
+### Dynamic Artifact Names
+
+```python
+from typing import Annotated
+from zenml import step, ArtifactConfig
+import pandas as pd
+
+@step(substitutions={"region": "us-west"})
+def process_regional_data() -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(name="data_{date}_{region}")
+]:
+    # The artifact will be named like "data_2024-01-15_us-west"
+    return pd.DataFrame({"col": [1, 2, 3]})
+```
+
+### Artifact with Metadata
+
+```python
+from typing import Annotated
+from zenml import step, ArtifactConfig
+import pandas as pd
+
+@step
+def create_dataset() -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(
+        name="processed_dataset",
+        tags=["processed", "v2"],
+        run_metadata={
+            "source": "external_api",
+            "num_rows": 10000,
+            "quality_score": 0.95
+        }
+    )
+]:
+    return pd.DataFrame({"feature": range(10000)})
+```
+
+### Model Artifact
+
+```python
+from typing import Annotated, Any
+from zenml import step, ArtifactConfig
+from zenml.enums import ArtifactType
+
+@step
+def train_model(X_train, y_train) -> Annotated[
+    Any,
+    ArtifactConfig(
+        name="trained_model",
+        artifact_type=ArtifactType.MODEL,
+        tags=["sklearn", "random-forest"],
+        run_metadata={
+            "accuracy": 0.92,
+            "n_estimators": 100
+        }
+    )
+]:
+    from sklearn.ensemble import RandomForestClassifier
+    model = RandomForestClassifier(n_estimators=100)
+    model.fit(X_train, y_train)
+    return model
+```
+
+### Versioned Artifacts
+
+```python
+from typing import Annotated
+from zenml import step, ArtifactConfig
+import pandas as pd
+
+@step
+def create_versioned_data() -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(
+        name="experiment_data",
+        version="1.2.0",
+        tags=["experiment"]
+    )
+]:
+    return pd.DataFrame({"data": [1, 2, 3]})
+```
+
+## Notes
+
+- `ArtifactConfig` is typically used with Python's `Annotated` type hint to attach configuration to step outputs.
+- The `{date}` and `{time}` placeholders are automatically available and will be replaced with the current date and time.
+- For custom placeholders, provide substitution values using the `substitutions` parameter in the `@step` decorator or when calling `step.with_options()`.
+- If you don't specify an artifact name, ZenML will use the output parameter name from the step function.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@step" href="./step" icon="code">
+    Learn about creating steps
+  </Card>
+  <Card title="ExternalArtifact" href="./external-artifact" icon="file-import">
+    Use external artifacts as inputs
+  </Card>
+  <Card title="save_artifact" href="./save-artifact" icon="floppy-disk">
+    Manually save artifacts
+  </Card>
+  <Card title="log_metadata" href="./log-metadata" icon="tag">
+    Log artifact metadata
+  </Card>
+</CardGroup>

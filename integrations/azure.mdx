@@ -1,0 +1,459 @@
+---
+title: Azure Integration
+description: Run ZenML pipelines on Microsoft Azure with AzureML
+---
+
+The Azure integration provides support for running ZenML pipelines on Microsoft Azure infrastructure, including AzureML orchestration, Azure Blob Storage for artifacts, and Azure Container Registry.
+
+## Installation
+
+```bash
+pip install "zenml[azure]"
+```
+
+This installs the following key packages:
+- `azureml-core==1.56.0` - Azure ML SDK
+- `azure-ai-ml==1.23.1` - Azure ML v2 SDK
+- `azure-identity` - Azure authentication
+- `azure-storage-blob==12.17.0` - Blob Storage SDK
+- `adlfs>=2021.10.0` - Azure Data Lake Storage filesystem
+- `kubernetes` - Kubernetes Python client
+
+## Available Components
+
+The Azure integration provides these stack components:
+
+<CardGroup cols={2}>
+  <Card title="AzureML Orchestrator" icon="diagram-project">
+    Execute pipelines using Azure Machine Learning
+  </Card>
+  <Card title="AzureML Step Operator" icon="shoe-prints">
+    Run individual steps on AzureML compute
+  </Card>
+  <Card title="Azure Artifact Store" icon="database">
+    Store artifacts in Azure Blob Storage
+  </Card>
+</CardGroup>
+
+## Authentication
+
+There are three ways to authenticate with Azure:
+
+### 1. Service Connector (Recommended)
+
+```python
+from zenml.client import Client
+
+Client().create_service_connector(
+    name="azure-connector",
+    type="azure",
+    auth_method="service-principal",
+    configuration={
+        "tenant_id": "your-tenant-id",
+        "client_id": "your-client-id",
+        "client_secret": "your-client-secret",
+        "subscription_id": "your-subscription-id",
+    },
+)
+```
+
+### 2. Explicit Service Principal
+
+```bash
+zenml orchestrator register azureml-orch \
+    --flavor=azureml \
+    --tenant_id=your-tenant-id \
+    --service_principal_id=your-client-id \
+    --service_principal_password=your-client-secret \
+    --subscription_id=your-subscription-id \
+    --resource_group=my-resource-group \
+    --workspace_name=my-azureml-workspace
+```
+
+### 3. Default Azure CLI Credentials
+
+If no credentials are provided, ZenML uses Azure CLI credentials:
+
+```bash
+az login
+```
+
+## AzureML Orchestrator
+
+The AzureML orchestrator runs your complete pipeline as an Azure ML pipeline.
+
+### Configuration
+
+```bash
+zenml orchestrator register azureml-orch \
+    --flavor=azureml \
+    --subscription_id=your-subscription-id \
+    --resource_group=my-resource-group \
+    --workspace_name=my-azureml-workspace \
+    --compute_target_name=cpu-cluster
+```
+
+**Required Parameters:**
+- `subscription_id` - Azure subscription ID
+- `resource_group` - Azure resource group name
+- `workspace_name` - AzureML workspace name
+
+**Optional Parameters:**
+- `compute_target_name` - Default compute target for pipeline steps
+- `tenant_id` - Azure tenant ID (if using service principal)
+- `service_principal_id` - Service principal client ID
+- `service_principal_password` - Service principal secret
+
+### AzureML Workspace Setup
+
+Create an AzureML workspace:
+
+```bash
+# Using Azure CLI
+az ml workspace create \
+    --name my-azureml-workspace \
+    --resource-group my-resource-group \
+    --location eastus
+
+# Create compute cluster
+az ml compute create \
+    --name cpu-cluster \
+    --type AmlCompute \
+    --size STANDARD_D2_V2 \
+    --min-instances 0 \
+    --max-instances 4 \
+    --resource-group my-resource-group \
+    --workspace-name my-azureml-workspace
+```
+
+### Service Principal Permissions
+
+Create a service principal with required permissions:
+
+```bash
+# Create service principal
+az ad sp create-for-rbac \
+    --name zenml-azureml-sp \
+    --role Contributor \
+    --scopes /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/my-resource-group
+
+# Grant AzureML-specific permissions
+az role assignment create \
+    --assignee YOUR_CLIENT_ID \
+    --role "AzureML Compute Operator" \
+    --scope /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/my-resource-group/providers/Microsoft.MachineLearningServices/workspaces/my-azureml-workspace
+```
+
+### Step-Level Settings
+
+Customize individual steps with AzureML-specific settings:
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.azure.flavors.azureml_orchestrator_flavor import (
+    AzureMLOrchestratorSettings,
+)
+
+@step(
+    settings={
+        "orchestrator": AzureMLOrchestratorSettings(
+            compute_target_name="gpu-cluster",
+            environment_variables={"CUDA_VISIBLE_DEVICES": "0"},
+        )
+    }
+)
+def train_on_gpu(data: pd.DataFrame) -> Model:
+    # Training code runs on GPU cluster
+    ...
+
+@step(
+    settings={
+        "orchestrator": AzureMLOrchestratorSettings(
+            compute_target_name="cpu-cluster",
+        )
+    }
+)
+def preprocess_data() -> pd.DataFrame:
+    # Preprocessing on CPU cluster
+    ...
+
+@pipeline
+def training_pipeline():
+    data = preprocess_data()
+    train_on_gpu(data)
+```
+
+**Available Settings:**
+- `compute_target_name` - Azure ML compute target for this step
+- `environment_variables` - Environment variables for the step
+
+### Compute Target Types
+
+AzureML supports various compute targets:
+
+**Compute Clusters (AmlCompute):**
+- Auto-scaling clusters
+- Cost-effective for batch workloads
+- Supports CPU and GPU VMs
+
+```bash
+az ml compute create \
+    --name gpu-cluster \
+    --type AmlCompute \
+    --size STANDARD_NC6 \
+    --min-instances 0 \
+    --max-instances 4
+```
+
+**Compute Instances:**
+- Always-on development VMs
+- Jupyter notebooks included
+- Good for interactive development
+
+```bash
+az ml compute create \
+    --name dev-instance \
+    --type ComputeInstance \
+    --size STANDARD_DS3_V2
+```
+
+**Common VM Sizes:**
+
+| VM Size | vCPUs | RAM | GPU | Use Case |
+|---------|-------|-----|-----|----------|
+| STANDARD_D2_V2 | 2 | 7 GB | - | Light workloads |
+| STANDARD_D4_V2 | 8 | 28 GB | - | Standard training |
+| STANDARD_NC6 | 6 | 56 GB | 1x K80 | GPU training |
+| STANDARD_NC12 | 12 | 112 GB | 2x K80 | Multi-GPU training |
+| STANDARD_ND40rs_v2 | 40 | 672 GB | 8x V100 | Large-scale training |
+
+## AzureML Step Operator
+
+The step operator runs individual steps as AzureML jobs.
+
+### Configuration
+
+```bash
+zenml step-operator register azureml-step-op \
+    --flavor=azureml \
+    --subscription_id=your-subscription-id \
+    --resource_group=my-resource-group \
+    --workspace_name=my-azureml-workspace \
+    --compute_target_name=gpu-cluster
+```
+
+### Usage
+
+```python
+from zenml import step, pipeline
+
+@step(step_operator="azureml-step-op")
+def train_on_azureml(data: pd.DataFrame) -> Model:
+    # This step runs on AzureML
+    ...
+
+@step
+def preprocess_locally(raw_data: pd.DataFrame) -> pd.DataFrame:
+    # This step runs locally or on local orchestrator
+    ...
+
+@pipeline
+def hybrid_pipeline():
+    data = preprocess_locally(...)  # Runs locally
+    model = train_on_azureml(data)  # Runs on AzureML
+```
+
+## Azure Blob Storage Artifact Store
+
+Store artifacts in Azure Blob Storage.
+
+### Configuration
+
+```bash
+zenml artifact-store register azure-store \
+    --flavor=azure \
+    --path=az://my-container-name
+```
+
+The path must be in the format `az://container-name` or `abfs://container-name@account-name.dfs.core.windows.net`.
+
+### Storage Account Setup
+
+```bash
+# Create storage account
+az storage account create \
+    --name myzenmlstorage \
+    --resource-group my-resource-group \
+    --location eastus \
+    --sku Standard_LRS
+
+# Create container
+az storage container create \
+    --name my-container-name \
+    --account-name myzenmlstorage
+```
+
+### Access Configuration
+
+Grant access to the storage account:
+
+```bash
+# Using service principal
+az role assignment create \
+    --assignee YOUR_CLIENT_ID \
+    --role "Storage Blob Data Contributor" \
+    --scope /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/my-resource-group/providers/Microsoft.Storage/storageAccounts/myzenmlstorage
+```
+
+## Complete Stack Example
+
+Here's a complete production-ready Azure stack:
+
+```bash
+# Create service connector
+zenml service-connector register azure-prod \
+    --type=azure \
+    --auth_method=service-principal \
+    --tenant_id=your-tenant-id \
+    --client_id=your-client-id \
+    --client_secret=your-client-secret \
+    --subscription_id=your-subscription-id
+
+# Register components
+zenml orchestrator register azureml-prod \
+    --flavor=azureml \
+    --subscription_id=your-subscription-id \
+    --resource_group=my-resource-group \
+    --workspace_name=my-azureml-workspace \
+    --compute_target_name=cpu-cluster
+
+zenml artifact-store register azure-store-prod \
+    --flavor=azure \
+    --path=az://my-zenml-artifacts
+
+zenml container-registry register acr-prod \
+    --flavor=azure \
+    --uri=myregistry.azurecr.io
+
+# Create stack
+zenml stack register azure-prod \
+    -o azureml-prod \
+    -a azure-store-prod \
+    -c acr-prod
+
+# Activate stack
+zenml stack set azure-prod
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Managed Identity">
+    When running from Azure VMs or AKS, use managed identity instead of service principals:
+    
+    ```bash
+    # Enable managed identity on VM
+    az vm identity assign \
+        --name my-vm \
+        --resource-group my-resource-group
+    
+    # Grant permissions
+    az role assignment create \
+        --assignee-object-id YOUR_MANAGED_IDENTITY_PRINCIPAL_ID \
+        --role Contributor \
+        --scope /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/my-resource-group
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Auto-Scaling">
+    Configure compute clusters to auto-scale for cost efficiency:
+    
+    ```bash
+    az ml compute create \
+        --name autoscale-cluster \
+        --type AmlCompute \
+        --size STANDARD_D4_V2 \
+        --min-instances 0 \
+        --max-instances 10 \
+        --idle-seconds-before-scaledown 300
+    ```
+  </Accordion>
+
+  <Accordion title="Use Azure Key Vault">
+    Store secrets in Azure Key Vault:
+    
+    ```python
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+    
+    credential = DefaultAzureCredential()
+    client = SecretClient(
+        vault_url="https://my-keyvault.vault.azure.net/",
+        credential=credential
+    )
+    secret = client.get_secret("my-secret-name")
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Private Link">
+    Use Private Link for secure connectivity:
+    
+    ```bash
+    # Create private endpoint for workspace
+    az ml workspace private-endpoint create \
+        --name my-pe \
+        --resource-group my-resource-group \
+        --workspace-name my-azureml-workspace \
+        --vnet-name my-vnet \
+        --subnet my-subnet
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Authentication Failures">
+    If you see authentication errors:
+    
+    1. Verify service principal credentials are correct
+    2. Check service principal has required role assignments
+    3. Ensure subscription ID and tenant ID are correct
+    4. Try running `az login` if using CLI credentials
+  </Accordion>
+
+  <Accordion title="Compute Not Available">
+    If compute target is unavailable:
+    
+    1. Check compute cluster exists in the workspace
+    2. Verify compute is not in failed state
+    3. Check quota limits in the subscription
+    4. Ensure compute name matches configuration
+  </Accordion>
+
+  <Accordion title="Storage Access Denied">
+    If artifact storage fails:
+    
+    1. Verify storage account and container exist
+    2. Check service principal has "Storage Blob Data Contributor" role
+    3. Ensure path format is correct (`az://container-name`)
+    4. Check firewall rules if using private endpoints
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Azure Artifact Store" href="../stack-components/artifact-stores">
+    Configure Blob Storage for artifacts
+  </Card>
+  <Card title="Service Connectors" href="../stack-components/service-connectors">
+    Advanced authentication options
+  </Card>
+  <Card title="Remote Execution" href="../user-guide/production">
+    Production deployment patterns
+  </Card>
+  <Card title="AzureML Documentation" href="https://learn.microsoft.com/azure/machine-learning/">
+    Official Azure ML docs
+  </Card>
+</CardGroup>

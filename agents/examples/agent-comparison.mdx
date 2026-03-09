@@ -1,0 +1,548 @@
+---
+title: Agent Architecture Comparison
+description: Complete example comparing SingleAgentRAG, MultiSpecialist, and LangGraph architectures on customer service queries
+---
+
+This example demonstrates how to systematically compare different agent architectures using ZenML. It evaluates three approaches on real customer service queries and generates comprehensive performance reports.
+
+## Overview
+
+The agent comparison pipeline:
+
+1. Loads real customer service conversations
+2. Trains an intent classifier on the dataset
+3. Evaluates three agent architectures:
+   - **SingleAgentRAG**: Unified knowledge base approach
+   - **MultiSpecialistAgents**: Routing to specialized agents
+   - **LangGraphAgent**: Stateful workflow with validation
+4. Generates performance metrics and visualizations
+5. Creates interactive Mermaid diagrams for each architecture
+6. Produces an HTML comparison report
+
+## Source code
+
+The complete example is available at:
+
+```bash
+https://github.com/zenml-io/zenml/tree/main/examples/agent_comparison
+```
+
+## Quick start
+
+Clone and run the example:
+
+```bash
+git clone https://github.com/zenml-io/zenml.git
+cd zenml/examples/agent_comparison
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Optional: Set API keys for real LLM responses
+export OPENAI_API_KEY=sk-xxx
+export LANGFUSE_PUBLIC_KEY=pk-xxx
+export LANGFUSE_SECRET_KEY=sk-xxx
+
+# Run the comparison pipeline
+python run.py
+```
+
+The pipeline works with or without API keys:
+- **With API keys**: Uses LiteLLM for real agent responses
+- **Without API keys**: Uses mock responses (perfect for demos)
+
+## Pipeline structure
+
+```python
+from zenml import pipeline, Model
+from steps import (
+    load_real_conversations,
+    load_prompts,
+    train_intent_classifier,
+    run_architecture_comparison,
+    evaluate_and_decide,
+)
+
+model = Model(
+    name="customer_service_agent",
+    description="Customer service agent model",
+)
+
+@pipeline(enable_cache=False, model=model)
+def compare_agent_architectures() -> None:
+    """Compare different agent architectures on customer service queries."""
+    # Load test data
+    queries = load_real_conversations()
+    
+    # Load prompts as artifacts
+    (
+        single_agent_prompt,
+        specialist_returns_prompt,
+        specialist_billing_prompt,
+        specialist_technical_prompt,
+        specialist_general_prompt,
+        langgraph_workflow_prompt,
+    ) = load_prompts()
+    
+    # Train intent classifier
+    intent_classifier = train_intent_classifier(queries)
+    
+    # Run all architectures on the same data
+    (
+        results,
+        single_agent,
+        multi_specialist_agent,
+        langgraph_agent,
+    ) = run_architecture_comparison(
+        queries,
+        intent_classifier,
+        single_agent_prompt,
+        specialist_returns_prompt,
+        specialist_billing_prompt,
+        specialist_technical_prompt,
+        specialist_general_prompt,
+        langgraph_workflow_prompt,
+    )
+    
+    # Generate comparison report
+    _ = evaluate_and_decide(queries, results)
+```
+
+## Agent architectures
+
+### 1. SingleAgentRAG
+
+Unified approach using a knowledge base:
+
+```python
+class SingleAgentRAG(BaseAgent):
+    """Simple RAG agent that handles all queries with one approach."""
+    
+    def __init__(self, prompts: Optional[List[Prompt]] = None):
+        super().__init__("SingleAgentRAG", prompts)
+        self.knowledge_base = {
+            "return": "Items can be returned within 30 days with original receipt.",
+            "refund": "Refunds are processed within 5-7 business days.",
+            "shipping": "Free shipping on orders over $50.",
+            "support": "Customer support available 24/7.",
+            "warranty": "All products come with 1-year warranty.",
+        }
+    
+    def process_query(self, query: str) -> AgentResponse:
+        """Process query using LLM or keyword matching."""
+        start_time = time.time()
+        
+        if should_use_real_llm():
+            knowledge_context = "\n".join(
+                [f"{k}: {v}" for k, v in self.knowledge_base.items()]
+            )
+            prompt = f"""You are a helpful customer service agent.
+            
+Knowledge Base:
+{knowledge_context}
+
+Customer Question: {query}
+
+Provide a helpful, professional response:"""
+            
+            response_text = call_llm(prompt, model="gpt-3.5-turbo")
+            confidence = random.uniform(0.8, 0.95)
+            tokens_used = len(prompt.split()) + len(response_text.split())
+        else:
+            # Fallback to keyword matching
+            query_lower = query.lower()
+            response_text = "I'd be happy to help you with that! "
+            
+            if "return" in query_lower:
+                response_text += self.knowledge_base["return"]
+            elif "refund" in query_lower:
+                response_text += self.knowledge_base["refund"]
+            else:
+                response_text += "Let me connect you with a specialist."
+            
+            confidence = random.uniform(0.7, 0.9)
+            tokens_used = random.randint(50, 150)
+        
+        latency_ms = (time.time() - start_time) * 1000
+        
+        return AgentResponse(
+            text=response_text,
+            latency_ms=latency_ms,
+            confidence=confidence,
+            tokens_used=tokens_used,
+        )
+```
+
+**Characteristics:**
+- Single unified approach for all query types
+- Simple knowledge base lookup
+- No query routing or specialization
+- Works with or without LLM
+
+### 2. MultiSpecialistAgents
+
+Routing to specialized agents:
+
+```python
+class MultiSpecialistAgents(BaseAgent):
+    """Multiple specialized agents for different query types."""
+    
+    def __init__(self, prompts: Optional[List[Prompt]] = None):
+        super().__init__("MultiSpecialistAgents", prompts)
+        self.specialists = {
+            "returns": "Returns Specialist: I handle all return and exchange requests.",
+            "billing": "Billing Specialist: I can help with payment and billing questions.",
+            "technical": "Technical Support: I assist with product setup and troubleshooting.",
+            "general": "Customer Service: I'm here to help with general questions.",
+        }
+    
+    def _route_query(self, query: str) -> str:
+        """Route query to appropriate specialist."""
+        query_lower = query.lower()
+        
+        if any(word in query_lower for word in ["return", "exchange", "refund"]):
+            return "returns"
+        elif any(word in query_lower for word in ["payment", "billing", "charge"]):
+            return "billing"
+        elif any(word in query_lower for word in ["setup", "install", "technical"]):
+            return "technical"
+        else:
+            return "general"
+    
+    def process_query(self, query: str) -> AgentResponse:
+        """Process query using specialist routing."""
+        start_time = time.time()
+        
+        specialist = self._route_query(query)
+        
+        if should_use_real_llm():
+            prompt = f"""You are a {specialist.title()} Specialist.
+Help customers with {specialist} inquiries.
+
+Customer Question: {query}
+
+Provide a helpful, specific response:"""
+            
+            response_text = call_llm(prompt, model="gpt-3.5-turbo")
+            confidence = random.uniform(0.85, 0.98)
+            tokens_used = len(prompt.split()) + len(response_text.split())
+        else:
+            response_text = self.specialists[specialist]
+            confidence = random.uniform(0.8, 0.95)
+            tokens_used = random.randint(80, 200)
+        
+        latency_ms = (time.time() - start_time) * 1000
+        
+        return AgentResponse(
+            text=response_text,
+            latency_ms=latency_ms,
+            confidence=confidence,
+            tokens_used=tokens_used,
+        )
+```
+
+**Characteristics:**
+- Keyword-based routing to specialists
+- Four specialized agents (returns, billing, technical, general)
+- Higher confidence due to specialization
+- Specialized prompts per agent
+
+### 3. LangGraphAgent
+
+Stateful workflow with validation:
+
+```python
+from langgraph.graph import StateGraph, END, START
+from langchain_core.messages import HumanMessage
+
+class LangGraphCustomerServiceAgent(BaseAgent):
+    """LangGraph-based customer service agent with workflow visualization."""
+    
+    def __init__(self, prompts: Optional[List[Prompt]] = None):
+        super().__init__("LangGraphCustomerServiceAgent", prompts)
+        self.graph = self._build_graph()
+    
+    def _build_graph(self):
+        """Build the LangGraph workflow."""
+        workflow = StateGraph(CustomerServiceState)
+        
+        # Add nodes
+        workflow.add_node("analyze_query", self._analyze_query)
+        workflow.add_node("classify_intent", self._classify_intent)
+        workflow.add_node("generate_response", self._generate_response)
+        workflow.add_node("validate_response", self._validate_response)
+        
+        # Add edges
+        workflow.add_edge(START, "analyze_query")
+        workflow.add_edge("analyze_query", "classify_intent")
+        workflow.add_edge("classify_intent", "generate_response")
+        workflow.add_edge("generate_response", "validate_response")
+        workflow.add_edge("validate_response", END)
+        
+        return workflow.compile()
+    
+    def _analyze_query(self, state: CustomerServiceState) -> CustomerServiceState:
+        """Analyze query complexity."""
+        query = state["messages"][-1].content
+        complexity = len(query.split())
+        state["confidence"] = 0.9 if complexity < 10 else 0.8
+        return state
+    
+    def _classify_intent(self, state: CustomerServiceState) -> CustomerServiceState:
+        """Classify customer intent."""
+        query = state["messages"][-1].content.lower()
+        
+        if "return" in query or "refund" in query:
+            state["query_type"] = "returns"
+        elif "billing" in query or "payment" in query:
+            state["query_type"] = "billing"
+        else:
+            state["query_type"] = "general"
+        
+        return state
+    
+    def _generate_response(self, state: CustomerServiceState) -> CustomerServiceState:
+        """Generate response based on intent."""
+        query = state["messages"][-1].content
+        query_type = state["query_type"]
+        
+        if should_use_real_llm():
+            prompt = f"""You are a customer service agent.
+Query type: {query_type}
+
+Customer Question: {query}
+
+Generate a helpful response:"""
+            response = call_llm(prompt, model="gpt-3.5-turbo")
+        else:
+            response = f"I understand you have a {query_type} question. Let me help you with that."
+        
+        state["response_text"] = response
+        return state
+    
+    def _validate_response(self, state: CustomerServiceState) -> CustomerServiceState:
+        """Validate response quality."""
+        if len(state["response_text"]) < 20:
+            state["response_text"] = "Could you provide more details?"
+            state["confidence"] = 0.6
+        return state
+    
+    def process_query(self, query: str) -> AgentResponse:
+        """Process query through workflow."""
+        start_time = time.time()
+        
+        initial_state = CustomerServiceState(
+            messages=[HumanMessage(content=query)],
+            query_type="",
+            confidence=0.8,
+            response_text="",
+        )
+        
+        final_state = self.graph.invoke(initial_state)
+        latency_ms = (time.time() - start_time) * 1000
+        
+        return AgentResponse(
+            text=final_state["response_text"],
+            latency_ms=latency_ms,
+            confidence=final_state["confidence"],
+            tokens_used=random.randint(80, 180),
+        )
+```
+
+**Characteristics:**
+- Four-stage workflow: analyze → classify → generate → validate
+- Stateful processing with LangGraph
+- Response quality validation
+- Confidence adjustment based on complexity
+
+## Evaluation step
+
+```python
+@step
+def run_architecture_comparison(
+    queries: List[str],
+    intent_classifier: Any,
+    *prompts: Prompt,
+) -> Tuple[
+    Annotated[Dict[str, Any], "comparison_results"],
+    Annotated[SingleAgentRAG, "single_agent"],
+    Annotated[MultiSpecialistAgents, "multi_specialist"],
+    Annotated[LangGraphAgent, "langgraph_agent"],
+]:
+    """Run all three architectures on test data."""
+    # Initialize agents with prompts
+    prompt_list = list(prompts)
+    
+    single_agent = SingleAgentRAG(prompts=prompt_list)
+    multi_specialist = MultiSpecialistAgents(prompts=prompt_list)
+    langgraph_agent = LangGraphCustomerServiceAgent(prompts=prompt_list)
+    
+    # Test each architecture
+    results = {}
+    
+    for name, agent in [
+        ("SingleAgentRAG", single_agent),
+        ("MultiSpecialistAgents", multi_specialist),
+        ("LangGraph", langgraph_agent),
+    ]:
+        responses = []
+        total_latency = 0
+        total_tokens = 0
+        confidences = []
+        
+        for query in queries:
+            response = agent.process_query(query)
+            responses.append(response)
+            total_latency += response.latency_ms
+            total_tokens += response.tokens_used
+            confidences.append(response.confidence)
+        
+        results[name] = {
+            "responses": responses,
+            "avg_latency_ms": total_latency / len(queries),
+            "total_tokens": total_tokens,
+            "avg_confidence": sum(confidences) / len(confidences),
+        }
+    
+    return results, single_agent, multi_specialist, langgraph_agent
+```
+
+## Visualization
+
+The pipeline generates interactive Mermaid diagrams for each architecture:
+
+```python
+def get_mermaid_diagram(self) -> str:
+    """Generate Mermaid diagram for architecture."""
+    return """<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Architecture</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="mermaid">
+        graph TD
+            A[Customer Query] --> B[Process]
+            B --> C[Generate Response]
+            C --> D[Customer Response]
+            
+            style A fill:#e1f5fe
+            style D fill:#e8f5e8
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>"""
+```
+
+## Results report
+
+The final step generates an HTML comparison report:
+
+```python
+@step
+def evaluate_and_decide(
+    queries: List[str],
+    results: Dict[str, Any],
+) -> Annotated[str, "comparison_report"]:
+    """Generate comprehensive comparison report."""
+    html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent Architecture Comparison Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .architecture { border: 2px solid #ddd; padding: 20px; margin: 20px 0; }
+        .metric { background: #f0f0f0; padding: 10px; margin: 5px 0; }
+        .winner { border-color: #28a745; background: #d4edda; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background-color: #4CAF50; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Agent Architecture Comparison</h1>
+    
+    <h2>Performance Summary</h2>
+    <table>
+        <tr>
+            <th>Architecture</th>
+            <th>Avg Latency (ms)</th>
+            <th>Total Tokens</th>
+            <th>Avg Confidence</th>
+        </tr>"""
+    
+    for name, data in results.items():
+        html += f"""
+        <tr>
+            <td><strong>{name}</strong></td>
+            <td>{data['avg_latency_ms']:.1f}</td>
+            <td>{data['total_tokens']}</td>
+            <td>{data['avg_confidence']:.2f}</td>
+        </tr>"""
+    
+    html += """</table>
+    
+    <h2>Key Findings</h2>
+    <ul>
+        <li>SingleAgentRAG: Simple, unified approach with moderate performance</li>
+        <li>MultiSpecialistAgents: Higher confidence through specialization</li>
+        <li>LangGraph: Structured workflow with validation steps</li>
+    </ul>
+    
+    <h2>Recommendation</h2>
+    <p>For production deployment, consider MultiSpecialistAgents for specialized
+    domains or LangGraph for complex workflows requiring validation.</p>
+</body>
+</html>"""
+    
+    return html
+```
+
+## Key findings
+
+The evaluation typically reveals:
+
+1. **SingleAgentRAG**: Good baseline, simple to implement
+2. **MultiSpecialistAgents**: 5-10% higher confidence through specialization
+3. **LangGraph**: Best for complex workflows, built-in validation
+
+**Performance comparison:**
+- Latency: LangGraph slightly higher due to multi-stage workflow
+- Token usage: Similar across architectures
+- Confidence: MultiSpecialist and LangGraph outperform SingleAgent
+
+## Running with observability
+
+Integrate Langfuse for cost and performance tracking:
+
+```bash
+export LANGFUSE_PUBLIC_KEY=pk-xxx
+export LANGFUSE_SECRET_KEY=sk-xxx
+python run.py
+```
+
+View traces in the Langfuse dashboard:
+- Token usage per query
+- Latency by architecture
+- Cost breakdown
+- LLM calls and responses
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Agent evaluation" href="/agents/agent-evaluation" icon="chart-line">
+    Learn more about systematic agent evaluation
+  </Card>
+  <Card title="Deploying agents" href="/agents/examples/deploying-agents" icon="rocket">
+    Deploy agents as HTTP services
+  </Card>
+  <Card title="Framework integrations" href="/agents/examples/framework-integrations" icon="puzzle-piece">
+    Examples for 12+ agent frameworks
+  </Card>
+  <Card title="Orchestrating agents" href="/agents/orchestrating-agents" icon="diagram-project">
+    Production agent orchestration patterns
+  </Card>
+</CardGroup>

@@ -1,0 +1,266 @@
+---
+title: "Tag"
+description: "Tag class for creating rich tags with colors and properties"
+icon: "tag"
+---
+
+The `Tag` class represents a tag that can be attached to ZenML resources with additional properties like colors and exclusivity.
+
+## Signature
+
+```python
+Tag(
+    name: str,
+    color: Optional[ColorVariants] = None,
+    exclusive: Optional[bool] = None,
+    cascade: Optional[bool] = None,
+)
+```
+
+## Parameters
+
+<ParamField path="name" type="str" required>
+  The name of the tag.
+</ParamField>
+
+<ParamField path="color" type="ColorVariants" optional>
+  The color of the tag in the UI. Available colors: RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, PINK, GRAY.
+</ParamField>
+
+<ParamField path="exclusive" type="bool" optional>
+  Whether this tag is exclusive (only one tag from the same group can be applied).
+</ParamField>
+
+<ParamField path="cascade" type="bool" optional>
+  Whether the tag should cascade to child resources.
+</ParamField>
+
+## Examples
+
+### Basic Tag
+
+```python
+from zenml import Tag, add_tags
+
+tag = Tag(name="production")
+add_tags(tag)
+```
+
+### Tag with Color
+
+```python
+from zenml import Tag, add_tags
+from zenml.enums import ColorVariants
+
+# Create a red tag for critical issues
+critical_tag = Tag(
+    name="critical",
+    color=ColorVariants.RED
+)
+
+# Create a green tag for approved items
+approved_tag = Tag(
+    name="approved",
+    color=ColorVariants.GREEN
+)
+
+add_tags([critical_tag, approved_tag])
+```
+
+### All Available Colors
+
+```python
+from zenml import Tag
+from zenml.enums import ColorVariants
+
+tags = [
+    Tag(name="error", color=ColorVariants.RED),
+    Tag(name="warning", color=ColorVariants.ORANGE),
+    Tag(name="pending", color=ColorVariants.YELLOW),
+    Tag(name="success", color=ColorVariants.GREEN),
+    Tag(name="info", color=ColorVariants.BLUE),
+    Tag(name="feature", color=ColorVariants.PURPLE),
+    Tag(name="special", color=ColorVariants.PINK),
+    Tag(name="archived", color=ColorVariants.GRAY),
+]
+```
+
+### Exclusive Tags
+
+```python
+from zenml import Tag, add_tags
+from zenml.enums import ColorVariants
+
+# Create mutually exclusive status tags
+status_tags = [
+    Tag(name="draft", color=ColorVariants.GRAY, exclusive=True),
+    Tag(name="review", color=ColorVariants.YELLOW, exclusive=True),
+    Tag(name="approved", color=ColorVariants.GREEN, exclusive=True),
+]
+
+# Only one status tag can be applied at a time
+add_tags(Tag(name="draft", exclusive=True))
+# Adding "approved" would remove "draft" if exclusive is enforced
+```
+
+### Tags for Different Environments
+
+```python
+from zenml import Tag, add_tags
+from zenml.enums import ColorVariants
+
+env_tags = [
+    Tag(name="dev", color=ColorVariants.BLUE),
+    Tag(name="staging", color=ColorVariants.YELLOW),
+    Tag(name="production", color=ColorVariants.GREEN),
+]
+
+# Tag a pipeline run
+add_tags(Tag(name="production", color=ColorVariants.GREEN))
+```
+
+### Priority Tags
+
+```python
+from zenml import Tag, add_tags
+from zenml.enums import ColorVariants
+
+priority_tags = [
+    Tag(name="p0-critical", color=ColorVariants.RED, exclusive=True),
+    Tag(name="p1-high", color=ColorVariants.ORANGE, exclusive=True),
+    Tag(name="p2-medium", color=ColorVariants.YELLOW, exclusive=True),
+    Tag(name="p3-low", color=ColorVariants.GRAY, exclusive=True),
+]
+
+# Mark a run as high priority
+add_tags(Tag(name="p1-high", color=ColorVariants.ORANGE))
+```
+
+### Quality Tags
+
+```python
+from zenml import step, Tag, add_tags
+from zenml.enums import ColorVariants
+import pandas as pd
+
+@step
+def validate_data() -> pd.DataFrame:
+    df = pd.read_csv("data.csv")
+    
+    quality_score = calculate_quality(df)
+    
+    if quality_score > 0.95:
+        tag = Tag(name="excellent-quality", color=ColorVariants.GREEN)
+    elif quality_score > 0.85:
+        tag = Tag(name="good-quality", color=ColorVariants.BLUE)
+    elif quality_score > 0.70:
+        tag = Tag(name="acceptable-quality", color=ColorVariants.YELLOW)
+    else:
+        tag = Tag(name="poor-quality", color=ColorVariants.RED)
+    
+    add_tags(tag)
+    return df
+```
+
+### Team Tags
+
+```python
+from zenml import Tag, add_tags
+from zenml.enums import ColorVariants
+
+team_tags = [
+    Tag(name="team-ml", color=ColorVariants.PURPLE),
+    Tag(name="team-data", color=ColorVariants.BLUE),
+    Tag(name="team-platform", color=ColorVariants.GREEN),
+]
+
+add_tags(Tag(name="team-ml", color=ColorVariants.PURPLE))
+```
+
+### Experiment Tags
+
+```python
+from zenml import step, Tag, add_tags
+from zenml.enums import ColorVariants
+
+@step
+def experiment_step(experiment_name: str) -> None:
+    # Tag with experiment identifier
+    experiment_tag = Tag(
+        name=f"exp-{experiment_name}",
+        color=ColorVariants.PURPLE
+    )
+    
+    add_tags([
+        experiment_tag,
+        Tag(name="experiment", color=ColorVariants.BLUE)
+    ])
+```
+
+### Lifecycle Tags
+
+```python
+from zenml import Tag
+from zenml.enums import ColorVariants
+
+lifecycle_tags = [
+    Tag(name="created", color=ColorVariants.GRAY),
+    Tag(name="in-progress", color=ColorVariants.YELLOW),
+    Tag(name="completed", color=ColorVariants.GREEN),
+    Tag(name="failed", color=ColorVariants.RED),
+    Tag(name="archived", color=ColorVariants.GRAY),
+]
+```
+
+### Cascade Tags
+
+```python
+from zenml import Tag, add_tags
+from zenml.enums import ColorVariants
+
+# Create a tag that cascades to child resources
+project_tag = Tag(
+    name="project-alpha",
+    color=ColorVariants.PURPLE,
+    cascade=True  # Will cascade to all child resources
+)
+
+add_tags(project_tag, pipeline="training_pipeline")
+```
+
+## Color Variants
+
+Available color options from `ColorVariants` enum:
+
+- `RED` - For errors, critical items, high priority
+- `ORANGE` - For warnings, important items
+- `YELLOW` - For pending, in-progress items
+- `GREEN` - For success, approved, production items
+- `BLUE` - For information, general categorization
+- `PURPLE` - For features, experiments, special items
+- `PINK` - For highlights, special categories
+- `GRAY` - For archived, deprecated, low priority items
+
+## Use Cases
+
+1. **Visual organization** - Use colors to quickly identify resources in the UI
+2. **Status tracking** - Create colored tags for different lifecycle stages
+3. **Priority management** - Use exclusive tags for priority levels
+4. **Team ownership** - Color-code resources by team
+5. **Environment marking** - Distinguish dev, staging, and production resources
+6. **Quality indicators** - Visual quality scores with color-coded tags
+7. **Experiment tracking** - Tag and color-code different experiments
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="add_tags" href="./add-tags" icon="tags">
+    Add tags to resources
+  </Card>
+  <Card title="remove_tags" href="./remove-tags" icon="tag">
+    Remove tags from resources
+  </Card>
+  <Card title="@pipeline" href="./pipeline" icon="code">
+    Configure tags in pipelines
+  </Card>
+</CardGroup>

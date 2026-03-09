@@ -1,0 +1,332 @@
+---
+title: "register_artifact"
+description: "Register existing data in the artifact store as a ZenML artifact"
+icon: "file-check"
+---
+
+The `register_artifact()` function allows you to register existing data stored in the artifact store as a ZenML artifact without uploading it again.
+
+## Signature
+
+```python
+def register_artifact(
+    folder_or_file_uri: str,
+    name: str,
+    version: Optional[Union[int, str]] = None,
+    artifact_type: Optional[ArtifactType] = None,
+    tags: Optional[List[str]] = None,
+    has_custom_name: bool = True,
+    artifact_metadata: Dict[str, MetadataType] = {},
+) -> ArtifactVersionResponse
+```
+
+## Parameters
+
+<ParamField path="folder_or_file_uri" type="str" required>
+  The full URI within the artifact store to the folder or file. Must be within the artifact store bounds.
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  The name of the artifact.
+</ParamField>
+
+<ParamField path="version" type="Union[int, str]" optional>
+  The version of the artifact. If not provided, a new auto-incremented version will be used.
+</ParamField>
+
+<ParamField path="artifact_type" type="ArtifactType" optional>
+  The artifact type. If not given, defaults to `DATA`.
+</ParamField>
+
+<ParamField path="tags" type="List[str]" optional>
+  Tags to associate with the artifact.
+</ParamField>
+
+<ParamField path="has_custom_name" type="bool" default="True">
+  Whether the artifact name is custom and should be listed in the dashboard "Artifacts" tab.
+</ParamField>
+
+<ParamField path="artifact_metadata" type="Dict[str, MetadataType]" default="{}">
+  Metadata dictionary to attach to the artifact version.
+</ParamField>
+
+## Returns
+
+<ResponseField name="artifact" type="ArtifactVersionResponse">
+  The registered artifact version response object.
+</ResponseField>
+
+## Examples
+
+### Register a File
+
+```python
+from zenml import register_artifact
+from zenml import Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+# Get the full path to your file in the artifact store
+file_uri = f"{artifact_store.path}/my_data/dataset.csv"
+
+artifact = register_artifact(
+    folder_or_file_uri=file_uri,
+    name="external_dataset"
+)
+
+print(f"Registered artifact: {artifact.id}")
+```
+
+### Register a Directory
+
+```python
+from zenml import register_artifact
+from zenml import Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+# Register an entire directory
+folder_uri = f"{artifact_store.path}/model_checkpoints/run_123"
+
+artifact = register_artifact(
+    folder_or_file_uri=folder_uri,
+    name="model_checkpoints",
+    version="run_123"
+)
+```
+
+### Register with Tags and Metadata
+
+```python
+from zenml import register_artifact
+from zenml.enums import ArtifactType
+from zenml import Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+data_uri = f"{artifact_store.path}/external/production_data.parquet"
+
+artifact = register_artifact(
+    folder_or_file_uri=data_uri,
+    name="production_dataset",
+    artifact_type=ArtifactType.DATA,
+    tags=["production", "validated", "2024-01"],
+    artifact_metadata={
+        "source": "data_warehouse",
+        "extracted_at": "2024-01-15T10:00:00Z",
+        "row_count": 1000000,
+        "quality_score": 0.98
+    }
+)
+```
+
+### Register Model Weights
+
+```python
+from zenml import register_artifact
+from zenml.enums import ArtifactType
+from zenml import Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+# Register pre-trained model weights
+weights_uri = f"{artifact_store.path}/pretrained/bert_weights"
+
+artifact = register_artifact(
+    folder_or_file_uri=weights_uri,
+    name="bert_base_weights",
+    version="pretrained",
+    artifact_type=ArtifactType.MODEL,
+    tags=["bert", "pretrained", "base"],
+    artifact_metadata={
+        "model_type": "BERT",
+        "parameters": "110M",
+        "training_data": "BooksCorpus + Wikipedia"
+    }
+)
+```
+
+### Register in a Step
+
+```python
+from zenml import step, register_artifact, Client
+import os
+
+@step
+def register_external_data() -> None:
+    client = Client()
+    artifact_store = client.active_stack.artifact_store
+    
+    # Path to existing data in artifact store
+    data_uri = f"{artifact_store.path}/imports/daily_data.csv"
+    
+    # Check if file exists
+    if artifact_store.exists(data_uri):
+        artifact = register_artifact(
+            folder_or_file_uri=data_uri,
+            name="daily_import",
+            tags=["daily", "imported"]
+        )
+        print(f"Registered: {artifact.name}")
+    else:
+        print(f"File not found: {data_uri}")
+```
+
+### Register Multiple Files
+
+```python
+from zenml import register_artifact, Client
+import os
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+base_path = f"{artifact_store.path}/batch_imports"
+
+# Register multiple datasets
+for i in range(1, 6):
+    file_uri = f"{base_path}/batch_{i}.parquet"
+    
+    if artifact_store.exists(file_uri):
+        artifact = register_artifact(
+            folder_or_file_uri=file_uri,
+            name="batch_data",
+            version=f"batch_{i}",
+            tags=["batch", f"batch_{i}"]
+        )
+        print(f"Registered batch {i}")
+```
+
+### Register and Link to Model
+
+```python
+from zenml import step, register_artifact, link_artifact_to_model
+from zenml import Client, Model
+
+@step(model=Model(name="my_model", version="1.0"))
+def register_and_link() -> None:
+    client = Client()
+    artifact_store = client.active_stack.artifact_store
+    
+    # Register artifact
+    data_uri = f"{artifact_store.path}/validation/test_set.csv"
+    artifact = register_artifact(
+        folder_or_file_uri=data_uri,
+        name="test_dataset"
+    )
+    
+    # Link to model
+    link_artifact_to_model(artifact)
+```
+
+### Version Management
+
+```python
+from zenml import register_artifact, Client
+from datetime import datetime
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+# Register with date-based versioning
+today = datetime.now().strftime("%Y-%m-%d")
+data_uri = f"{artifact_store.path}/daily/data_{today}.csv"
+
+artifact = register_artifact(
+    folder_or_file_uri=data_uri,
+    name="daily_snapshot",
+    version=today,
+    tags=["daily", today]
+)
+```
+
+### Register Cloud Storage Data
+
+```python
+from zenml import register_artifact
+from zenml import Client
+
+# For S3-based artifact store
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+# Register data already in S3
+s3_uri = f"{artifact_store.path}/data-lake/users/demographics.parquet"
+
+artifact = register_artifact(
+    folder_or_file_uri=s3_uri,
+    name="user_demographics",
+    tags=["users", "demographics", "pii"],
+    artifact_metadata={
+        "source": "data_lake",
+        "contains_pii": True,
+        "anonymized": False
+    }
+)
+```
+
+## Use Cases
+
+1. **Import existing data** that was uploaded directly to the artifact store
+2. **Register manual uploads** from data engineering teams
+3. **Track external datasets** stored in your artifact store
+4. **Version control data** that was created outside ZenML
+5. **Integrate legacy data** into ZenML workflows
+6. **Register pre-trained models** or checkpoints
+7. **Catalog data lake contents** in ZenML
+
+## Important Notes
+
+- The URI **must be within the artifact store bounds** (start with the artifact store path)
+- The data is **not moved or copied** - only metadata is registered in ZenML
+- The artifact uses the `PreexistingDataMaterializer` which returns a `pathlib.Path` when loaded
+- Changes to the underlying files are **not tracked** by ZenML
+- The URI is validated to ensure it points to the artifact store
+
+## Differences from save_artifact
+
+| Feature | `register_artifact()` | `save_artifact()` |
+|---------|---------------------|-------------------|
+| Data location | Already in artifact store | Uploaded by ZenML |
+| Use case | Register existing data | Save new data |
+| Materializer | PreexistingDataMaterializer | Auto-selected |
+| Load behavior | Returns Path object | Returns original type |
+| Metadata extraction | Manual only | Automatic + manual |
+
+## Error Handling
+
+```python
+from zenml import register_artifact, Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+data_uri = f"{artifact_store.path}/external/data.csv"
+
+try:
+    artifact = register_artifact(
+        folder_or_file_uri=data_uri,
+        name="external_data"
+    )
+    print("Registration successful")
+except FileNotFoundError:
+    print(f"URI is outside artifact store bounds")
+except RuntimeError as e:
+    print(f"URI already registered: {e}")
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="save_artifact" href="./save-artifact" icon="floppy-disk">
+    Upload and save new artifacts
+  </Card>
+  <Card title="load_artifact" href="./load-artifact" icon="download">
+    Load registered artifacts
+  </Card>
+  <Card title="link_artifact_to_model" href="./link-artifact-to-model" icon="link">
+    Link artifacts to models
+  </Card>
+</CardGroup>

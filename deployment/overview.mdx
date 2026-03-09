@@ -1,0 +1,380 @@
+---
+title: Deployment Overview
+description: Understanding ZenML server deployment architecture and options
+---
+
+# Deployment Architecture Overview
+
+ZenML provides a flexible deployment architecture that supports both local development and production-scale deployments. Understanding the deployment options helps you choose the right approach for your MLOps infrastructure.
+
+## Architecture Components
+
+A ZenML deployment consists of several key components:
+
+### ZenML Server
+
+The ZenML server is the central component that provides:
+
+- **REST API**: Exposes endpoints for pipeline management, artifact tracking, and metadata storage
+- **Dashboard**: Web-based UI for monitoring pipelines and managing resources
+- **Authentication**: Supports multiple auth schemes (NO_AUTH, HTTP_BASIC, OAUTH2_PASSWORD_BEARER, EXTERNAL)
+- **Database Backend**: Stores pipeline metadata, artifacts, and configuration (SQLite or MySQL-compatible databases)
+- **Secrets Management**: Secure storage for credentials and sensitive data
+
+### Database Layer
+
+ZenML supports two database types:
+
+**SQLite** (Development)
+- Local file-based database
+- No external dependencies
+- Suitable for development and testing
+- Limited scalability and no concurrent access
+
+**MySQL/MariaDB** (Production)
+- External database service
+- High availability and scalability
+- Connection pooling and SSL support
+- Backup and recovery capabilities
+
+### Artifact Store
+
+Stores pipeline artifacts and outputs:
+- Local filesystem (development)
+- Cloud object storage (S3, GCS, Azure Blob)
+- Network-attached storage (NFS, EFS)
+
+### Orchestrator
+
+Executes pipeline steps:
+- Local orchestrator (development)
+- Kubernetes (production)
+- Cloud-managed services (Vertex AI, SageMaker, AzureML)
+
+## Deployment Types
+
+ZenML supports multiple deployment scenarios:
+
+### Local Development
+
+<Card title="Local Server" icon="laptop">
+  Quick setup for development and testing on your local machine.
+</Card>
+
+**Characteristics:**
+- SQLite database
+- Local artifact storage
+- Single-user access
+- Quick iteration and debugging
+
+**Use Cases:**
+- Pipeline development
+- Local testing
+- Proof of concepts
+- Learning ZenML
+
+### Docker Deployment
+
+<Card title="Docker Container" icon="docker">
+  Containerized server deployment for consistent environments.
+</Card>
+
+**Characteristics:**
+- Isolated environment
+- Reproducible setup
+- Easy to start/stop
+- Configurable resources
+
+**Use Cases:**
+- Development teams
+- CI/CD integration
+- Local production testing
+- Multi-user development
+
+### Kubernetes Deployment
+
+<Card title="Kubernetes with Helm" icon="dharmachakra">
+  Production-grade deployment with high availability and scalability.
+</Card>
+
+**Characteristics:**
+- Horizontal scaling
+- High availability
+- Load balancing
+- Advanced networking
+- Resource management
+
+**Use Cases:**
+- Production deployments
+- Enterprise environments
+- Multi-tenant setups
+- Cloud-native infrastructure
+
+### Cloud-Managed Services
+
+<Card title="Cloud Platforms" icon="cloud">
+  Deploy on managed cloud platforms for fully managed infrastructure.
+</Card>
+
+**Characteristics:**
+- Fully managed infrastructure
+- Automatic scaling
+- Built-in monitoring
+- Managed databases and storage
+
+**Use Cases:**
+- AWS (ECS, EKS, App Runner)
+- GCP (Cloud Run, GKE)
+- Azure (Container Apps, AKS)
+
+## Deployment Decision Matrix
+
+Choose your deployment type based on these criteria:
+
+| Criteria | Local | Docker | Kubernetes | Cloud-Managed |
+|----------|-------|--------|------------|---------------|
+| **Ease of Setup** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ |
+| **Scalability** | ⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **High Availability** | ❌ | ❌ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Multi-User** | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Production Ready** | ❌ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Cost** | Free | Low | Medium | Medium-High |
+| **Maintenance** | None | Low | Medium-High | Low |
+
+## Authentication Schemes
+
+ZenML server supports multiple authentication methods:
+
+### NO_AUTH
+
+No authentication required. Suitable only for local development.
+
+```bash
+zenml connect --url http://localhost:8080 --no-auth
+```
+
+### HTTP_BASIC
+
+Simple username/password authentication.
+
+```bash
+zenml connect --url http://localhost:8080 \
+  --username admin \
+  --password securepass
+```
+
+### OAUTH2_PASSWORD_BEARER
+
+OAuth2-based authentication with JWT tokens (recommended for production).
+
+```bash
+zenml connect --url https://zenml.example.com
+```
+
+### EXTERNAL
+
+Integrate with external authentication providers (SSO, LDAP, etc.).
+
+## Environment Variables
+
+Key environment variables for ZenML server configuration:
+
+### Server Configuration
+
+```bash
+# Enable server mode
+ZENML_SERVER=true
+
+# Set deployment type for telemetry
+ZENML_SERVER_DEPLOYMENT_TYPE=kubernetes
+
+# Authentication scheme
+ZENML_SERVER_AUTH_SCHEME=OAUTH2_PASSWORD_BEARER
+
+# JWT secret key (generate with: openssl rand -hex 32)
+ZENML_AUTH_JWT_SECRET_KEY=your-secret-key
+
+# Server URL
+ZENML_SERVER_URL=https://zenml.example.com
+```
+
+### Database Configuration
+
+```bash
+# MySQL database URL
+ZENML_STORE_URL=mysql://user:password@host:3306/zenml
+
+# Connection pool settings
+ZENML_STORE_POOL_SIZE=20
+ZENML_STORE_MAX_OVERFLOW=20
+
+# SSL configuration
+ZENML_STORE_SSL_CA=/path/to/ca.crt
+ZENML_STORE_SSL_VERIFY_SERVER_CERT=true
+```
+
+### Performance Settings
+
+```bash
+# Thread pool size for request handling
+ZENML_SERVER_THREAD_POOL_SIZE=40
+
+# Authentication thread pool size
+ZENML_SERVER_AUTH_THREAD_POOL_SIZE=5
+
+# Request timeout (seconds)
+ZENML_SERVER_REQUEST_TIMEOUT=20
+
+# Request cache timeout (seconds)
+ZENML_SERVER_REQUEST_CACHE_TIMEOUT=300
+```
+
+### Secrets Store Configuration
+
+```bash
+# Use SQL secrets store
+ZENML_SECRETS_STORE_TYPE=sql
+ZENML_SECRETS_STORE_ENCRYPTION_KEY=your-encryption-key
+
+# Or use cloud secrets managers
+ZENML_SECRETS_STORE_TYPE=aws
+ZENML_SECRETS_STORE_AWS_REGION=us-east-1
+```
+
+## Security Considerations
+
+<CardGroup cols={2}>
+  <Card title="Network Security" icon="shield">
+    - Use HTTPS in production
+    - Configure proper firewall rules
+    - Implement network policies in Kubernetes
+    - Use VPC/subnet isolation
+  </Card>
+  
+  <Card title="Authentication" icon="lock">
+    - Always use authentication in production
+    - Rotate JWT secret keys regularly
+    - Use strong passwords
+    - Enable external auth for SSO
+  </Card>
+  
+  <Card title="Secrets Management" icon="key">
+    - Encrypt secrets at rest
+    - Use cloud secrets managers
+    - Rotate credentials regularly
+    - Audit secret access
+  </Card>
+  
+  <Card title="Database Security" icon="database">
+    - Use SSL for database connections
+    - Verify server certificates
+    - Restrict database access
+    - Regular backups and encryption
+  </Card>
+</CardGroup>
+
+## High Availability Setup
+
+For production deployments requiring high availability:
+
+### Multiple Replicas
+
+```yaml
+# values.yaml for Helm chart
+zenml:
+  replicaCount: 3
+  
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+```
+
+### External Database
+
+Use managed database services:
+- AWS RDS (MySQL)
+- Google Cloud SQL (MySQL)
+- Azure Database for MySQL
+
+### Load Balancing
+
+Distribute traffic across replicas:
+- Kubernetes Service (ClusterIP)
+- Ingress Controller (nginx, traefik)
+- Cloud Load Balancers
+
+### Health Checks
+
+Configure readiness and liveness probes:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 8
+  periodSeconds: 15
+```
+
+## Monitoring and Observability
+
+### Metrics
+
+ZenML server exposes metrics for monitoring:
+- Request count and latency
+- Database connection pool usage
+- Authentication failures
+- Pipeline run statistics
+
+### Logging
+
+Configure logging verbosity:
+
+```bash
+# Set log level
+ZENML_LOGGING_VERBOSITY=INFO  # DEBUG, INFO, WARNING, ERROR
+
+# Enable debug mode
+ZENML_DEBUG=true
+```
+
+### Health Endpoints
+
+- `/health` - Liveness check
+- `/ready` - Readiness check
+- `/version` - Server version information
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Server Deployment" href="/deployment/server-deployment" icon="server">
+    Learn about different server deployment options
+  </Card>
+  
+  <Card title="Kubernetes Deployment" href="/deployment/kubernetes" icon="dharmachakra">
+    Deploy ZenML on Kubernetes with Helm
+  </Card>
+  
+  <Card title="Docker Deployment" href="/deployment/docker" icon="docker">
+    Run ZenML server in Docker containers
+  </Card>
+  
+  <Card title="Configuration Guide" href="/how-to/customize-docker-builds" icon="gear">
+    Customize your deployment configuration
+  </Card>
+</CardGroup>
+
+## References
+
+- [ZenML Server Source Code](https://github.com/zenml-io/zenml/tree/main/src/zenml/zen_server)
+- [Helm Chart](https://github.com/zenml-io/zenml/tree/main/helm)
+- [Docker Files](https://github.com/zenml-io/zenml/tree/main/docker)

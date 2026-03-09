@@ -1,0 +1,606 @@
+---
+title: Experiment Trackers
+description: Track ML experiments, metrics, and parameters across pipeline runs
+---
+
+# Experiment Trackers
+
+Experiment trackers let you track your ML experiments by logging parameters, metrics, and artifacts. In the ZenML world, every pipeline run is considered an experiment, and experiment tracker components facilitate the storage and visualization of experiment results.
+
+## Overview
+
+Experiment tracking is essential for:
+- Comparing different model configurations
+- Tracking hyperparameters and their impact
+- Logging metrics across training runs
+- Visualizing training progress
+- Reproducing successful experiments
+- Collaborating with team members
+
+## What Experiment Trackers Do
+
+An experiment tracker component:
+- Logs parameters (hyperparameters, config values)
+- Records metrics (accuracy, loss, custom metrics)
+- Stores artifacts (models, plots, datasets)
+- Tracks code versions and dependencies
+- Provides visualization dashboards
+- Enables experiment comparison
+- Links experiments to pipeline runs
+
+## Available Experiment Trackers
+
+### MLflow Experiment Tracker
+
+MLflow is an open-source platform for the complete machine learning lifecycle.
+
+**Installation:**
+```bash
+zenml integration install mlflow
+```
+
+**Configuration:**
+```bash
+# Local tracking
+zenml experiment-tracker register mlflow_tracker --flavor=mlflow
+
+# Remote tracking server
+zenml experiment-tracker register mlflow_tracker --flavor=mlflow \
+  --tracking_uri=http://mlflow-server:5000 \
+  --tracking_username=admin \
+  --tracking_password=password
+```
+
+**Features:**
+- Comprehensive experiment tracking
+- Model registry
+- Project packaging
+- Multi-framework support
+- REST API and UI
+- Artifact storage
+
+**Use cases:**
+- End-to-end ML lifecycle management
+- Team collaboration
+- Model versioning and deployment
+- Multi-framework projects
+
+**Example:**
+```python
+from zenml import step, pipeline
+import mlflow
+
+@step(experiment_tracker="mlflow_tracker")
+def train_model(learning_rate: float) -> float:
+    # Log parameters
+    mlflow.log_param("learning_rate", learning_rate)
+    
+    # Training code
+    model = train(...)
+    accuracy = evaluate(model)
+    
+    # Log metrics
+    mlflow.log_metric("accuracy", accuracy)
+    
+    # Log artifacts
+    mlflow.log_artifact("model.pkl")
+    
+    return accuracy
+```
+
+### Weights & Biases (W&B) Experiment Tracker
+
+Weights & Biases is a popular experiment tracking and visualization platform.
+
+**Installation:**
+```bash
+zenml integration install wandb
+```
+
+**Configuration:**
+```bash
+zenml experiment-tracker register wandb_tracker --flavor=wandb \
+  --entity=my-team \
+  --project=my-project
+```
+
+**Authentication:**
+```bash
+# Set API key
+export WANDB_API_KEY=<your-api-key>
+
+# Or login interactively
+wandb login
+```
+
+**Features:**
+- Real-time metric streaming
+- Interactive visualizations
+- Hyperparameter sweeps
+- Model versioning
+- Team collaboration
+- System metrics logging
+- Reports and dashboards
+
+**Use cases:**
+- Real-time experiment monitoring
+- Hyperparameter optimization
+- Team collaboration
+- Publication-ready visualizations
+- Deep learning projects
+
+**Example:**
+```python
+from zenml import step
+import wandb
+
+@step(experiment_tracker="wandb_tracker")
+def train_with_wandb(config: dict) -> None:
+    # Initialize run
+    wandb.init(config=config)
+    
+    for epoch in range(config["epochs"]):
+        loss = train_epoch()
+        
+        # Log metrics
+        wandb.log({
+            "epoch": epoch,
+            "loss": loss,
+            "learning_rate": config["lr"],
+        })
+    
+    # Log model
+    wandb.save("model.h5")
+```
+
+### Neptune Experiment Tracker
+
+Neptune is a metadata store for MLOps, built for research and production teams.
+
+**Installation:**
+```bash
+zenml integration install neptune
+```
+
+**Configuration:**
+```bash
+zenml experiment-tracker register neptune_tracker --flavor=neptune \
+  --project=my-workspace/my-project
+```
+
+**Authentication:**
+```bash
+export NEPTUNE_API_TOKEN=<your-api-token>
+```
+
+**Features:**
+- Experiment tracking and versioning
+- Model registry
+- Dataset versioning
+- Custom dashboards
+- Async logging
+- Team collaboration
+- Compare experiments
+
+**Use cases:**
+- Production ML workflows
+- Long-running experiments
+- Large-scale experimentation
+- Model registry needs
+- Team collaboration
+
+**Example:**
+```python
+from zenml import step
+import neptune.new as neptune
+
+@step(experiment_tracker="neptune_tracker")
+def train_with_neptune(params: dict) -> None:
+    # Create a run
+    run = neptune.init_run()
+    
+    # Log parameters
+    run["parameters"] = params
+    
+    # Training loop
+    for epoch in range(params["epochs"]):
+        metrics = train_epoch()
+        run["train/loss"].log(metrics["loss"])
+        run["train/accuracy"].log(metrics["accuracy"])
+    
+    # Stop tracking
+    run.stop()
+```
+
+### Comet Experiment Tracker
+
+Comet is a meta machine learning platform for tracking, comparing, and optimizing experiments and models.
+
+**Installation:**
+```bash
+zenml integration install comet
+```
+
+**Configuration:**
+```bash
+zenml experiment-tracker register comet_tracker --flavor=comet \
+  --workspace=my-workspace \
+  --project_name=my-project
+```
+
+**Authentication:**
+```bash
+export COMET_API_KEY=<your-api-key>
+```
+
+**Features:**
+- Experiment tracking and comparison
+- Hyperparameter optimization
+- Model production monitoring
+- Code and dependency tracking
+- Visualization and reports
+- Team collaboration
+
+**Use cases:**
+- Experiment management at scale
+- Model monitoring in production
+- Hyperparameter tuning
+- Team workflows
+
+### Vertex AI Experiment Tracker
+
+Google Cloud's Vertex AI Experiments for tracking ML experiments.
+
+**Installation:**
+```bash
+zenml integration install gcp
+```
+
+**Configuration:**
+```bash
+zenml experiment-tracker register vertex_tracker --flavor=vertex \
+  --project=my-gcp-project \
+  --location=us-central1
+```
+
+**Features:**
+- Integration with Vertex AI platform
+- Experiment tracking and comparison
+- Metadata management
+- Pipeline tracking
+- GCP-native authentication
+
+**Use cases:**
+- GCP-based ML infrastructure
+- Vertex AI pipelines
+- Google Cloud ecosystem integration
+- Enterprise GCP deployments
+
+## Choosing an Experiment Tracker
+
+| Tracker | Best For | Key Features | Hosting |
+|---------|----------|--------------|----------|
+| **MLflow** | Flexibility, open source | Model registry, versatile | Self-hosted / Managed |
+| **W&B** | Real-time tracking, visualization | Interactive UI, sweeps | Cloud (SaaS) |
+| **Neptune** | Production, metadata store | Async logging, versioning | Cloud (SaaS) |
+| **Comet** | Comprehensive tracking | Production monitoring | Cloud (SaaS) |
+| **Vertex AI** | GCP infrastructure | GCP integration | Cloud (GCP) |
+
+## Using Experiment Trackers
+
+### Basic Usage
+
+Enable experiment tracking in your pipeline:
+
+```python
+from zenml import step, pipeline
+
+@step(experiment_tracker="<tracker-name>")
+def training_step(data: pd.DataFrame) -> Model:
+    # Your training code here
+    # Logging is automatic within the step context
+    return model
+
+@pipeline
+def ml_pipeline():
+    data = load_data()
+    model = training_step(data)
+```
+
+### Logging Parameters
+
+```python
+import mlflow
+
+@step(experiment_tracker="mlflow_tracker")
+def train_step(lr: float, epochs: int) -> None:
+    # Log individual parameters
+    mlflow.log_param("learning_rate", lr)
+    mlflow.log_param("epochs", epochs)
+    
+    # Or log a dict of parameters
+    params = {"batch_size": 32, "optimizer": "adam"}
+    mlflow.log_params(params)
+```
+
+### Logging Metrics
+
+```python
+import mlflow
+
+@step(experiment_tracker="mlflow_tracker")
+def train_step() -> None:
+    for epoch in range(num_epochs):
+        train_loss = train_epoch()
+        val_loss = validate()
+        
+        # Log metrics for each epoch
+        mlflow.log_metric("train_loss", train_loss, step=epoch)
+        mlflow.log_metric("val_loss", val_loss, step=epoch)
+```
+
+### Logging Artifacts
+
+```python
+import mlflow
+import matplotlib.pyplot as plt
+
+@step(experiment_tracker="mlflow_tracker")
+def train_and_visualize() -> None:
+    model = train()
+    
+    # Save and log model
+    save_model(model, "model.pkl")
+    mlflow.log_artifact("model.pkl")
+    
+    # Save and log plots
+    plt.plot(history)
+    plt.savefig("training_curve.png")
+    mlflow.log_artifact("training_curve.png")
+    
+    # Log directory of artifacts
+    mlflow.log_artifacts("./outputs/")
+```
+
+### Auto-logging
+
+Many frameworks support auto-logging:
+
+```python
+import mlflow
+from sklearn.ensemble import RandomForestClassifier
+
+@step(experiment_tracker="mlflow_tracker")
+def train_sklearn_model(X, y) -> None:
+    # Enable autologging for scikit-learn
+    mlflow.sklearn.autolog()
+    
+    # Training automatically logs params and metrics
+    model = RandomForestClassifier()
+    model.fit(X, y)
+    # Parameters, metrics, and model automatically logged!
+```
+
+Supported frameworks for auto-logging:
+- scikit-learn
+- TensorFlow/Keras
+- PyTorch
+- XGBoost
+- LightGBM
+- Spark ML
+
+## Comparing Experiments
+
+### Via UI
+
+All experiment trackers provide web UIs:
+
+**MLflow:**
+```bash
+# Start MLflow UI
+mlflow ui --port 5000
+# Navigate to http://localhost:5000
+```
+
+**W&B:**
+- Visit https://wandb.ai/your-entity/your-project
+
+**Neptune:**
+- Visit https://app.neptune.ai/your-workspace/your-project
+
+### Programmatically
+
+```python
+from zenml.client import Client
+
+client = Client()
+
+# Get all runs of a pipeline
+runs = client.list_pipeline_runs(
+    pipeline_name="training_pipeline",
+    sort_by="desc:created",
+    size=10,
+)
+
+# Access run metadata and artifacts
+for run in runs:
+    print(f"Run: {run.name}")
+    print(f"Status: {run.status}")
+    # Access tracked metrics through the experiment tracker
+```
+
+## Hyperparameter Optimization
+
+### With W&B Sweeps
+
+```python
+import wandb
+from zenml import step
+
+# Define sweep configuration
+sweep_config = {
+    "method": "bayes",
+    "metric": {"name": "val_accuracy", "goal": "maximize"},
+    "parameters": {
+        "learning_rate": {"min": 0.0001, "max": 0.1},
+        "batch_size": {"values": [16, 32, 64]},
+    },
+}
+
+@step(experiment_tracker="wandb_tracker")
+def train_with_sweep():
+    # Initialize sweep
+    run = wandb.init()
+    config = run.config
+    
+    # Train with sweep config
+    model = train(lr=config.learning_rate, batch_size=config.batch_size)
+    accuracy = evaluate(model)
+    
+    wandb.log({"val_accuracy": accuracy})
+```
+
+## Integration with ZenML
+
+### Automatic Run Linking
+
+ZenML automatically links experiment tracker runs to pipeline runs:
+
+```python
+from zenml.client import Client
+
+client = Client()
+run = client.get_pipeline_run("training_pipeline", "run_name")
+
+# Access experiment tracker metadata
+step = run.steps["training_step"]
+if step.metadata:
+    mlflow_run_id = step.metadata.get("mlflow_run_id")
+    print(f"MLflow run: {mlflow_run_id}")
+```
+
+### Model Registry Integration
+
+Combine experiment tracking with model registration:
+
+```python
+from zenml import step, Model
+import mlflow
+
+@step(
+    experiment_tracker="mlflow_tracker",
+    model=Model(name="my_classifier"),
+)
+def train_and_register(data) -> Any:
+    # Train model
+    model = train(data)
+    
+    # Log with MLflow
+    mlflow.sklearn.log_model(model, "model")
+    
+    # Also registered in ZenML model registry
+    return model
+```
+
+## Best Practices
+
+### Consistent Naming
+
+```python
+# Use consistent experiment names
+@step(experiment_tracker="mlflow_tracker")
+def train_step():
+    mlflow.set_experiment("sentiment-classification")
+    # Rest of your code
+```
+
+### Tag Your Experiments
+
+```python
+import mlflow
+
+@step(experiment_tracker="mlflow_tracker")
+def train_step():
+    mlflow.set_tag("model_type", "random_forest")
+    mlflow.set_tag("dataset_version", "v2.1")
+    mlflow.set_tag("developer", "data-science-team")
+```
+
+### Log Context
+
+```python
+import mlflow
+import platform
+
+@step(experiment_tracker="mlflow_tracker")
+def train_step():
+    # Log system information
+    mlflow.log_param("python_version", platform.python_version())
+    mlflow.log_param("os", platform.system())
+    
+    # Log data info
+    mlflow.log_param("train_size", len(train_data))
+    mlflow.log_param("test_size", len(test_data))
+```
+
+### Organize with Projects/Workspaces
+
+```python
+# Organize by project
+zenml experiment-tracker register dev_tracker --flavor=mlflow \
+  --tracking_uri=http://localhost:5000
+
+zenml experiment-tracker register prod_tracker --flavor=mlflow \
+  --tracking_uri=http://prod-mlflow:5000
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+```python
+# Test connection
+import mlflow
+
+mlflow.set_tracking_uri("http://mlflow-server:5000")
+try:
+    client = mlflow.tracking.MlflowClient()
+    experiments = client.list_experiments()
+    print(f"Connected! Found {len(experiments)} experiments")
+except Exception as e:
+    print(f"Connection failed: {e}")
+```
+
+### Authentication Errors
+
+```bash
+# Verify credentials
+echo $WANDB_API_KEY
+echo $NEPTUNE_API_TOKEN
+echo $COMET_API_KEY
+
+# Re-authenticate
+wandb login
+```
+
+### Missing Logs
+
+```python
+# Ensure experiment tracker is specified
+@step(experiment_tracker="mlflow_tracker")  # Don't forget this!
+def train_step():
+    import mlflow
+    mlflow.log_param("test", "value")  # This won't work without the decorator
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Step Operators" icon="microchip" href="/components/step-operators">
+    Run steps on specialized infrastructure
+  </Card>
+  
+  <Card title="Model Deployers" icon="rocket" href="/components/model-deployers">
+    Deploy trained models for inference
+  </Card>
+</CardGroup>

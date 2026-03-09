@@ -1,0 +1,600 @@
+---
+title: Deploying AI Agents
+description: Deploy agents as production HTTP services with embedded web interfaces using ZenML
+---
+
+This example demonstrates how to deploy an AI agent as a production HTTP service with an embedded web interface. The deployed agent analyzes documents and provides structured insights (summary, keywords, sentiment, readability) through both API and web UI.
+
+## Overview
+
+The document analysis agent:
+
+- **Ingests content** from direct input, file uploads, or URLs
+- **Extracts structured insights**: summary, keywords, sentiment, readability
+- **Runs online or offline**: Uses OpenAI if API key is set, otherwise fallback
+- **Provides HTTP API**: RESTful endpoint for programmatic access
+- **Includes web UI**: Modern SPA interface embedded in the deployment
+- **Returns HTML reports**: Visualization for the ZenML dashboard
+
+## Source code
+
+The complete example is available at:
+
+```bash
+https://github.com/zenml-io/zenml/tree/main/examples/deploying_agent
+```
+
+## Quick start
+
+### Installation
+
+```bash
+git clone https://github.com/zenml-io/zenml.git
+cd zenml/examples/deploying_agent
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Optional: Set OpenAI API key for LLM analysis
+export OPENAI_API_KEY=sk-xxx
+
+# Initialize ZenML
+zenml init
+zenml login
+```
+
+### Deploy the pipeline
+
+```bash
+# Deploy as HTTP service
+zenml pipeline deploy pipelines.doc_analyzer.doc_analyzer
+
+# Get endpoint URL
+zenml deployment describe doc_analyzer
+```
+
+### Invoke the agent
+
+#### Via CLI
+
+```bash
+zenml deployment invoke doc_analyzer \
+  --content="Artificial Intelligence is transforming how we work..." \
+  --filename="ai-overview.txt" \
+  --document_type="text"
+```
+
+#### Via HTTP API
+
+```bash
+curl -X POST http://localhost:8000/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parameters": {
+      "content": "Your document content here...",
+      "filename": "document.txt",
+      "document_type": "text"
+    }
+  }'
+```
+
+#### Via web interface
+
+Visit the deployment URL in your browser:
+
+```
+http://localhost:8000
+```
+
+The web UI provides three input methods:
+- **Direct Content**: Paste or type content directly
+- **Upload File**: Upload text files, markdown, or HTML
+- **URL**: Analyze content from a URL
+
+## Pipeline structure
+
+```python
+from zenml import pipeline, ArtifactConfig
+from zenml.config import DockerSettings, DeploymentSettings, CORSConfig
+from typing import Annotated, Optional
+from models import DocumentAnalysis
+
+docker_settings = DockerSettings(
+    requirements="requirements.txt",
+    environment={
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+    },
+)
+
+deployment_settings = DeploymentSettings(
+    app_title="Document Analysis Pipeline",
+    dashboard_files_path="ui",  # Serve web UI from ui/ directory
+    cors=CORSConfig(allow_origins=["*"]),  # Enable CORS for web access
+)
+
+@pipeline(
+    settings={
+        "docker": docker_settings,
+        "deployment": deployment_settings,
+    },
+    enable_cache=False,  # Disable caching for real-time serving
+)
+def doc_analyzer(
+    content: Optional[str] = None,
+    url: Optional[str] = None,
+    path: Optional[str] = None,
+    filename: Optional[str] = None,
+    document_type: str = "text",
+) -> Annotated[
+    DocumentAnalysis,
+    ArtifactConfig(name="document_analysis", tags=["analysis", "serving"]),
+]:
+    """Document analysis pipeline deployed as HTTP service.
+    
+    Args:
+        content: Direct text content (optional)
+        url: URL to download content from (optional)
+        path: Path to file (optional)
+        filename: Document name (auto-generated if not provided)
+        document_type: Type of document (text, markdown, report, article)
+    
+    Returns:
+        DocumentAnalysis: Complete analysis results
+    """
+    # Ingest document from various sources
+    document = ingest_document_step(
+        content=content,
+        url=url,
+        path=path,
+        filename=filename,
+        document_type=document_type,
+    )
+    
+    # Analyze document (LLM or deterministic fallback)
+    analysis = analyze_document_step(document)
+    
+    # Generate HTML report for dashboard
+    render_analysis_report_step(analysis)
+    
+    return analysis
+```
+
+## Pipeline steps
+
+### 1. Document ingestion
+
+```python
+@step
+def ingest_document_step(
+    content: Optional[str] = None,
+    url: Optional[str] = None,
+    path: Optional[str] = None,
+    filename: Optional[str] = None,
+    document_type: str = "text",
+) -> Annotated[DocumentRequest, "document"]:
+    """Ingest document from various sources.
+    
+    Supports three ingestion modes:
+    1. Direct content: Pass text directly
+    2. URL: Download from web (with HTML cleaning)
+    3. Path: Load from file system or artifact store
+    """
+    if content:
+        # Direct content ingestion
+        doc_content = content
+        doc_filename = filename or f"document_{int(time.time())}.txt"
+    
+    elif url:
+        # Download from URL
+        import requests
+        from bs4 import BeautifulSoup
+        
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        # Clean HTML if needed
+        if "text/html" in response.headers.get("content-type", ""):
+            soup = BeautifulSoup(response.content, "html.parser")
+            doc_content = soup.get_text(separator="\n", strip=True)
+        else:
+            doc_content = response.text
+        
+        doc_filename = filename or url.split("/")[-1] or "document.txt"
+    
+    elif path:
+        # Load from file
+        with open(path, "r") as f:
+            doc_content = f.read()
+        doc_filename = filename or os.path.basename(path)
+    
+    else:
+        raise ValueError("Must provide content, url, or path")
+    
+    # Validate content
+    if not doc_content or not doc_content.strip():
+        raise ValueError("Document content is empty")
+    
+    return DocumentRequest(
+        filename=doc_filename,
+        content=doc_content,
+        document_type=document_type,
+        word_count=len(doc_content.split()),
+    )
+```
+
+### 2. Document analysis
+
+```python
+@step
+def analyze_document_step(
+    document: DocumentRequest,
+) -> Annotated[DocumentAnalysis, "document_analysis"]:
+    """Analyze document using LLM or deterministic fallback.
+    
+    Attempts LLM analysis first (OpenAI), falls back to rule-based
+    analysis if LLM is unavailable.
+    """
+    # Validate input
+    if not document.content or not document.content.strip():
+        raise ValueError(f"Empty document: {document.filename}")
+    
+    # Try LLM analysis
+    try:
+        analysis_result = perform_llm_analysis(
+            content=document.content,
+            filename=document.filename,
+        )
+        analysis_method = "llm"
+        model_label = f"AI ({analysis_result['used_model']})"
+    
+    except Exception:
+        # Fallback to deterministic analysis
+        analysis_result = perform_deterministic_analysis(
+            content=document.content,
+            filename=document.filename,
+        )
+        analysis_method = "deterministic_fallback"
+        model_label = "rule-based (deterministic)"
+    
+    # Create analysis object
+    analysis = DocumentAnalysis(
+        document=document,
+        summary=analysis_result["summary"],
+        keywords=analysis_result["keywords"],
+        sentiment=analysis_result["sentiment"],
+        word_count=len(document.content.split()),
+        readability_score=analysis_result["readability_score"],
+        model=model_label,
+        latency_ms=analysis_result["latency_ms"],
+        tokens_prompt=analysis_result["tokens_prompt"],
+        tokens_completion=analysis_result["tokens_completion"],
+        metadata={
+            "source": "document_analysis_pipeline",
+            "analysis_method": analysis_method,
+            "document_type": document.document_type,
+        },
+    )
+    
+    return analysis
+```
+
+### 3. Report generation
+
+```python
+@step
+def render_analysis_report_step(
+    analysis: DocumentAnalysis,
+) -> Annotated[str, "analysis_report"]:
+    """Generate HTML report for dashboard visualization."""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Document Analysis: {analysis.document.filename}</title>
+    <link rel="stylesheet" href="report.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Document Analysis Report</h1>
+        
+        <div class="section">
+            <h2>Document Information</h2>
+            <p><strong>Filename:</strong> {analysis.document.filename}</p>
+            <p><strong>Type:</strong> {analysis.document.document_type}</p>
+            <p><strong>Word Count:</strong> {analysis.word_count:,}</p>
+        </div>
+        
+        <div class="section">
+            <h2>Summary</h2>
+            <p>{analysis.summary}</p>
+        </div>
+        
+        <div class="section">
+            <h2>Key Metrics</h2>
+            <div class="metrics">
+                <div class="metric">
+                    <h3>Sentiment</h3>
+                    <p class="sentiment-{analysis.sentiment}">{analysis.sentiment.title()}</p>
+                </div>
+                <div class="metric">
+                    <h3>Readability</h3>
+                    <p>{analysis.readability_score:.2f}</p>
+                </div>
+                <div class="metric">
+                    <h3>Processing Time</h3>
+                    <p>{analysis.latency_ms}ms</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Keywords</h2>
+            <div class="keywords">
+                {''.join(f'<span class="keyword">{kw}</span>' for kw in analysis.keywords)}
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Analysis Details</h2>
+            <p><strong>Model:</strong> {analysis.model}</p>
+            <p><strong>Tokens (prompt):</strong> {analysis.tokens_prompt:,}</p>
+            <p><strong>Tokens (completion):</strong> {analysis.tokens_completion:,}</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    return html
+```
+
+## LLM analysis implementation
+
+```python
+def perform_llm_analysis(
+    content: str,
+    filename: str,
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """Perform document analysis using OpenAI."""
+    from openai import OpenAI
+    import json
+    
+    # Clean and truncate content
+    cleaned_content = clean_text_content(content)
+    content_preview = cleaned_content[:4000]  # First 4000 chars
+    
+    # Build analysis prompt
+    prompt = f"""Analyze the following document and provide:
+1. A concise summary (2-3 sentences)
+2. Top 5 keywords
+3. Sentiment (positive/negative/neutral)
+4. Readability level (easy/medium/hard)
+
+Document: {filename}
+
+Content:
+{content_preview}
+
+Respond with JSON:
+{{
+  "summary": "...",
+  "keywords": ["...", "...", "...", "...", "..."],
+  "sentiment": "...",
+  "readability": "..."
+}}"""
+    
+    start_time = time.time()
+    
+    # Call OpenAI API
+    client = OpenAI()
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a document analysis expert."},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=500,
+        temperature=0.3,  # Low temperature for consistency
+    )
+    
+    latency_ms = int((time.time() - start_time) * 1000)
+    
+    # Parse JSON response
+    response_text = response.choices[0].message.content
+    analysis_response = json.loads(response_text)
+    
+    # Map readability to score
+    readability_map = {"easy": 0.8, "medium": 0.5, "hard": 0.3}
+    readability_score = readability_map.get(
+        analysis_response.get("readability", "medium").lower(),
+        0.5,
+    )
+    
+    return {
+        "summary": analysis_response["summary"],
+        "keywords": analysis_response["keywords"][:5],
+        "sentiment": analysis_response["sentiment"],
+        "readability_score": readability_score,
+        "tokens_prompt": response.usage.prompt_tokens,
+        "tokens_completion": response.usage.completion_tokens,
+        "latency_ms": latency_ms,
+        "used_model": model,
+    }
+```
+
+## Deterministic fallback
+
+```python
+def perform_deterministic_analysis(
+    content: str,
+    filename: str,
+) -> Dict[str, Any]:
+    """Rule-based analysis when LLM is unavailable."""
+    from collections import Counter
+    
+    start_time = time.time()
+    
+    # Extract summary from first paragraph
+    paragraphs = content.split("\n\n")
+    summary = paragraphs[0][:200] + "..." if len(paragraphs[0]) > 200 else paragraphs[0]
+    
+    # Simple keyword extraction
+    words = clean_text_content(content).lower().split()
+    stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for"}
+    
+    filtered_words = [
+        w for w in words
+        if len(w) > 3 and w not in stop_words and w.isalpha()
+    ]
+    
+    word_freq = Counter(filtered_words)
+    keywords = [word for word, _ in word_freq.most_common(5)]
+    
+    # Ensure 5 keywords
+    while len(keywords) < 5:
+        keywords.append(f"keyword{len(keywords) + 1}")
+    
+    # Default sentiment
+    sentiment = "neutral"
+    
+    # Readability based on average word length
+    avg_word_len = sum(len(w) for w in words) / len(words) if words else 5
+    readability_score = max(0.1, 1.0 - (avg_word_len - 4) / 10)
+    
+    latency_ms = int((time.time() - start_time) * 1000)
+    
+    return {
+        "summary": summary,
+        "keywords": keywords,
+        "sentiment": sentiment,
+        "readability_score": readability_score,
+        "tokens_prompt": len(content.split()),
+        "tokens_completion": len(summary.split()),
+        "latency_ms": latency_ms,
+    }
+```
+
+## Web UI
+
+The embedded web interface (`ui/index.html`) provides:
+
+- **Multi-tab interface**: Direct content, file upload, or URL analysis
+- **Real-time feedback**: Loading states and error messages
+- **Results display**: Summary, sentiment, keywords, metrics
+- **Responsive design**: Works on desktop and mobile
+- **Zero configuration**: Automatically served at deployment URL
+
+The UI is configured via `DeploymentSettings`:
+
+```python
+deployment_settings = DeploymentSettings(
+    app_title="Document Analysis Pipeline",
+    dashboard_files_path="ui",  # Serve files from ui/ directory
+    cors=CORSConfig(allow_origins=["*"]),  # Enable CORS
+)
+```
+
+## Deployment configuration
+
+### Docker settings
+
+```python
+docker_settings = DockerSettings(
+    requirements="requirements.txt",
+    python_package_installer="uv",  # Fast installs
+    environment={
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",  # Pass from host
+    },
+)
+```
+
+### Custom configuration
+
+Create a YAML config for advanced settings:
+
+```yaml
+# deployment_config.yaml
+settings:
+  deployer:
+    generate_auth_key: true  # Enable authentication
+    resources:
+      cpu: "2"
+      memory: "4Gi"
+```
+
+Deploy with config:
+
+```bash
+zenml pipeline deploy pipelines.doc_analyzer.doc_analyzer \
+  --config deployment_config.yaml
+```
+
+## Production considerations
+
+1. **Authentication**: Enable `generate_auth_key` for production
+2. **Rate limiting**: Implement request throttling
+3. **Monitoring**: Track latency, errors, and token usage
+4. **Scaling**: Configure replica count for high traffic
+5. **Costs**: Monitor OpenAI API usage and costs
+6. **Fallback**: Ensure deterministic analysis works without API key
+7. **Error handling**: Return user-friendly error messages
+8. **Validation**: Sanitize and validate all inputs
+
+## Testing the deployment
+
+### Health check
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Test analysis
+
+```bash
+curl -X POST http://localhost:8000/invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parameters": {
+      "content": "Machine learning is revolutionizing software development. AI models can now understand context, generate code, and assist developers in ways that were impossible just a few years ago. This technology is making software development more accessible and efficient.",
+      "filename": "ai-ml-overview.txt",
+      "document_type": "article"
+    }
+  }'
+```
+
+### Expected response
+
+```json
+{
+  "document": {
+    "filename": "ai-ml-overview.txt",
+    "content": "Machine learning is revolutionizing...",
+    "document_type": "article",
+    "word_count": 42
+  },
+  "summary": "Machine learning and AI are transforming software development by enabling new capabilities in code generation and developer assistance.",
+  "keywords": ["machine", "learning", "software", "development", "models"],
+  "sentiment": "positive",
+  "readability_score": 0.65,
+  "model": "AI (gpt-4o-mini)",
+  "latency_ms": 847,
+  "tokens_prompt": 156,
+  "tokens_completion": 32
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Agent comparison" href="/agents/examples/agent-comparison" icon="code">
+    Compare multiple agent architectures systematically
+  </Card>
+  <Card title="Framework integrations" href="/agents/examples/framework-integrations" icon="puzzle-piece">
+    Examples for 12+ agent frameworks
+  </Card>
+  <Card title="Orchestrating agents" href="/agents/orchestrating-agents" icon="diagram-project">
+    Production orchestration patterns
+  </Card>
+  <Card title="Agent evaluation" href="/agents/agent-evaluation" icon="chart-line">
+    Build systematic evaluation pipelines
+  </Card>
+</CardGroup>

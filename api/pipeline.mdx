@@ -1,0 +1,208 @@
+---
+title: "@pipeline"
+description: "Decorator to create a ZenML pipeline"
+icon: "code"
+---
+
+The `@pipeline` decorator transforms a Python function into a ZenML pipeline that orchestrates multiple steps.
+
+## Signature
+
+```python
+@pipeline(
+    name: Optional[str] = None,
+    dynamic: Optional[bool] = None,
+    enable_cache: Optional[bool] = None,
+    enable_artifact_metadata: Optional[bool] = None,
+    enable_step_logs: Optional[bool] = None,
+    enable_heartbeat: Optional[bool] = None,
+    enable_pipeline_logs: Optional[bool] = None,
+    environment: Optional[Dict[str, Any]] = None,
+    secrets: Optional[List[Union[UUID, str]]] = None,
+    settings: Optional[Dict[str, SettingsOrDict]] = None,
+    tags: Optional[List[Union[str, Tag]]] = None,
+    extra: Optional[Dict[str, Any]] = None,
+    on_failure: Optional[HookSpecification] = None,
+    on_success: Optional[HookSpecification] = None,
+    on_init: Optional[InitHookSpecification] = None,
+    on_init_kwargs: Optional[Dict[str, Any]] = None,
+    on_cleanup: Optional[HookSpecification] = None,
+    model: Optional[Model] = None,
+    retry: Optional[StepRetryConfig] = None,
+    substitutions: Optional[Dict[str, str]] = None,
+    execution_mode: Optional[ExecutionMode] = None,
+    cache_policy: Optional[CachePolicyOrString] = None,
+) -> Pipeline
+```
+
+## Parameters
+
+<ParamField path="name" type="str" optional>
+  The name of the pipeline. If not provided, the function name is used.
+</ParamField>
+
+<ParamField path="dynamic" type="bool" optional>
+  Whether this is a dynamic pipeline that can create steps at runtime.
+</ParamField>
+
+<ParamField path="enable_cache" type="bool" optional>
+  Whether to use caching for pipeline steps. Defaults to True.
+</ParamField>
+
+<ParamField path="enable_artifact_metadata" type="bool" optional>
+  Whether to enable metadata extraction for artifacts. Defaults to True.
+</ParamField>
+
+<ParamField path="enable_step_logs" type="bool" optional>
+  Whether to enable step logs.
+</ParamField>
+
+<ParamField path="enable_heartbeat" type="bool" optional>
+  Whether to enable heartbeat monitoring for steps.
+</ParamField>
+
+<ParamField path="enable_pipeline_logs" type="bool" optional>
+  Whether to enable pipeline logs.
+</ParamField>
+
+<ParamField path="environment" type="Dict[str, Any]" optional>
+  Environment variables to set when running this pipeline.
+</ParamField>
+
+<ParamField path="secrets" type="List[Union[UUID, str]]" optional>
+  Secrets to set as environment variables.
+</ParamField>
+
+<ParamField path="settings" type="Dict[str, SettingsOrDict]" optional>
+  Stack component settings for this pipeline.
+</ParamField>
+
+<ParamField path="tags" type="List[Union[str, Tag]]" optional>
+  Tags to apply to pipeline runs.
+</ParamField>
+
+<ParamField path="extra" type="Dict[str, Any]" optional>
+  Extra configurations for this pipeline.
+</ParamField>
+
+<ParamField path="on_failure" type="HookSpecification" optional>
+  Callback function or source path to execute on pipeline failure.
+</ParamField>
+
+<ParamField path="on_success" type="HookSpecification" optional>
+  Callback function or source path to execute on pipeline success.
+</ParamField>
+
+<ParamField path="on_init" type="InitHookSpecification" optional>
+  Callback function to run on pipeline initialization.
+</ParamField>
+
+<ParamField path="on_init_kwargs" type="Dict[str, Any]" optional>
+  Arguments for the init hook.
+</ParamField>
+
+<ParamField path="on_cleanup" type="HookSpecification" optional>
+  Callback function to run on pipeline cleanup.
+</ParamField>
+
+<ParamField path="model" type="Model" optional>
+  Model configuration for the Model Control Plane.
+</ParamField>
+
+<ParamField path="retry" type="StepRetryConfig" optional>
+  Retry configuration for pipeline steps.
+</ParamField>
+
+<ParamField path="substitutions" type="Dict[str, str]" optional>
+  Extra substitutions for name placeholders like `{date}` and `{time}`.
+</ParamField>
+
+<ParamField path="execution_mode" type="ExecutionMode" optional>
+  The execution mode to use for the pipeline.
+</ParamField>
+
+<ParamField path="cache_policy" type="CachePolicyOrString" optional>
+  Cache policy for this pipeline.
+</ParamField>
+
+## Returns
+
+<ResponseField name="pipeline" type="Pipeline">
+  A configured Pipeline instance that can be called to run the pipeline.
+</ResponseField>
+
+## Examples
+
+### Basic Pipeline
+
+```python
+from zenml import pipeline, step
+
+@step
+def load_data() -> dict:
+    return {"data": [1, 2, 3]}
+
+@step
+def process_data(data: dict) -> dict:
+    return {"processed": data["data"]}
+
+@pipeline
+def ml_pipeline():
+    data = load_data()
+    process_data(data)
+
+# Run the pipeline
+ml_pipeline()
+```
+
+### Pipeline with Configuration
+
+```python
+from zenml import pipeline, step, Model
+
+@pipeline(
+    name="training_pipeline",
+    enable_cache=False,
+    tags=["training", "production"],
+    model=Model(
+        name="my_model",
+        version="v1"
+    )
+)
+def training_pipeline():
+    data = load_data()
+    train_model(data)
+```
+
+### Dynamic Pipeline
+
+```python
+from zenml import pipeline, step
+
+@step
+def dynamic_step(x: int) -> int:
+    return x * 2
+
+@pipeline(dynamic=True)
+def dynamic_pipeline(n: int):
+    # Create steps dynamically based on input
+    for i in range(n):
+        dynamic_step(x=i)
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@step" href="./step" icon="code">
+    Learn about creating pipeline steps
+  </Card>
+  <Card title="Model" href="./model" icon="cube">
+    Configure model versioning
+  </Card>
+  <Card title="get_pipeline_context" href="./get-pipeline-context" icon="brackets-curly">
+    Access pipeline context
+  </Card>
+  <Card title="Schedule" href="./schedule" icon="clock">
+    Schedule pipeline runs
+  </Card>
+</CardGroup>

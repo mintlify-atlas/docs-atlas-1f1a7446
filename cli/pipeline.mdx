@@ -1,0 +1,497 @@
+---
+title: zenml pipeline
+description: Manage pipelines, runs, builds, and deployments via the CLI.
+---
+
+The `zenml pipeline` command group provides comprehensive pipeline management capabilities, from registration and execution to builds and long-running deployments.
+
+## Overview
+
+ZenML pipelines are collections of steps that define your ML workflows. The CLI allows you to:
+
+- Register pipeline definitions
+- Execute pipeline runs
+- Build Docker images for pipelines
+- Deploy pipelines for continuous execution
+- List and inspect pipeline runs
+- Manage pipeline builds and schedules
+
+## Command Structure
+
+```bash
+zenml pipeline <command> [OPTIONS] [ARGUMENTS]
+```
+
+## Core Commands
+
+### Register a Pipeline
+
+Register a pipeline definition with ZenML:
+
+```bash
+zenml pipeline register <SOURCE>
+```
+
+The `SOURCE` argument is an importable Python path to your pipeline instance:
+
+```bash
+zenml pipeline register my_module.training_pipeline
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--parameters`, `-p` | File Path | JSON file containing pipeline parameters |
+
+**Example with parameters:**
+
+```bash
+# Create parameters file
+echo '{"epochs": 100, "learning_rate": 0.001}' > params.json
+
+# Register with parameters
+zenml pipeline register my_module.training_pipeline --parameters params.json
+```
+
+### Run a Pipeline
+
+Execute a pipeline immediately:
+
+```bash
+zenml pipeline run <SOURCE> [OPTIONS]
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--config`, `-c` | File Path | Path to YAML/JSON configuration file |
+| `--stack`, `-s` | String | Name or ID of stack to run on |
+| `--build`, `-b` | String | Build ID or file path to use |
+| `--prevent-build-reuse` | Flag | Prevent automatic reuse of previous builds |
+
+**Examples:**
+
+```bash
+# Basic run
+zenml pipeline run my_module.training_pipeline
+
+# Run with configuration
+zenml pipeline run my_module.training_pipeline --config config.yaml
+
+# Run on specific stack
+zenml pipeline run my_module.training_pipeline --stack production
+
+# Run with specific build
+zenml pipeline run my_module.training_pipeline --build build_12345
+
+# Force new build
+zenml pipeline run my_module.training_pipeline --prevent-build-reuse
+```
+
+### Build Pipeline Images
+
+Build Docker images for a pipeline without running it:
+
+```bash
+zenml pipeline build <SOURCE> [OPTIONS]
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--config`, `-c` | File Path | Path to configuration file for the build |
+| `--stack`, `-s` | String | Name or ID of stack to build for |
+| `--output`, `-o` | File Path | Output path to save build information |
+
+**Examples:**
+
+```bash
+# Build for active stack
+zenml pipeline build my_module.training_pipeline
+
+# Build for specific stack
+zenml pipeline build my_module.training_pipeline --stack production
+
+# Build and save metadata
+zenml pipeline build my_module.training_pipeline --output build_info.yaml
+
+# Use saved build later
+zenml pipeline run my_module.training_pipeline --build build_info.yaml
+```
+
+### Deploy a Pipeline
+
+Deploy a pipeline for continuous or scheduled execution:
+
+```bash
+zenml pipeline deploy <SOURCE> [OPTIONS]
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--name`, `-n` | String | Deployment name (defaults to pipeline name) |
+| `--config`, `-c` | File Path | Path to deployment configuration |
+| `--stack`, `-s` | String | Stack name or ID |
+| `--build`, `-b` | String | Build ID or file path |
+| `--prevent-build-reuse` | Flag | Force new build |
+| `--update` | Flag | Update existing deployment with same name |
+| `--overtake` | Flag | Take over existing deployment |
+
+**Examples:**
+
+```bash
+# Deploy with auto-generated name
+zenml pipeline deploy my_module.training_pipeline
+
+# Deploy with custom name
+zenml pipeline deploy my_module.training_pipeline --name weekly-training
+
+# Deploy with configuration
+zenml pipeline deploy my_module.training_pipeline --config deploy_config.yaml
+
+# Update existing deployment
+zenml pipeline deploy my_module.training_pipeline --name weekly-training --update
+```
+
+## Pipeline Runs
+
+### List Pipeline Runs
+
+List all pipeline runs with filtering options:
+
+```bash
+zenml pipeline runs list [OPTIONS]
+```
+
+**Common filter options:**
+
+| Option | Description |
+|--------|-------------|
+| `--name` | Filter by run name |
+| `--pipeline` | Filter by pipeline name or ID |
+| `--stack` | Filter by stack name or ID |
+| `--status` | Filter by status (running, completed, failed, cached) |
+| `--user` | Filter by user name or ID |
+| `--created` | Filter by creation date |
+| `--sort_by` | Sort results (e.g., "desc:created") |
+| `--columns` | Select columns to display |
+| `--output`, `-o` | Output format (table, json, yaml, csv, tsv) |
+
+**Examples:**
+
+```bash
+# List all runs
+zenml pipeline runs list
+
+# List runs for specific pipeline
+zenml pipeline runs list --pipeline training_pipeline
+
+# List failed runs
+zenml pipeline runs list --status failed
+
+# List recent runs
+zenml pipeline runs list --sort_by "desc:created" --limit 10
+
+# List with custom columns
+zenml pipeline runs list --columns id,name,status,created
+
+# Export to CSV
+zenml pipeline runs list --output csv > runs.csv
+
+# Filter by date range
+zenml pipeline runs list --created "gte:2024-01-01 00:00:00"
+
+# Multiple filters
+zenml pipeline runs list --pipeline training_pipeline --status completed --created "gte:2024-01-01 00:00:00"
+```
+
+### Describe a Pipeline Run
+
+Get detailed information about a specific run:
+
+```bash
+zenml pipeline runs describe <RUN_NAME_OR_ID>
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--show-metadata` | Display run metadata |
+| `--show-steps` | Display all step details |
+
+**Example:**
+
+```bash
+zenml pipeline runs describe training_pipeline-2024-01-15
+```
+
+Output:
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃          Pipeline Run Details              ┃
+┠────────────────────────────────────────────┨
+┃ Name       │ training_pipeline-2024-01-15  ┃
+┃ Status     │ completed                     ┃
+┃ Pipeline   │ training_pipeline             ┃
+┃ Stack      │ production                    ┃
+┃ Created    │ 2024-01-15 10:30:00           ┃
+┃ Duration   │ 45m 30s                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Steps:
+  load_data          ✔ completed (5m 20s)
+  preprocess         ✔ completed (10m 15s)
+  train_model        ✔ completed (25m 30s)
+  evaluate_model     ✔ completed (4m 25s)
+```
+
+### Delete a Pipeline Run
+
+```bash
+zenml pipeline runs delete <RUN_NAME_OR_ID>
+```
+
+## Pipeline Builds
+
+### List Pipeline Builds
+
+```bash
+zenml pipeline builds list [OPTIONS]
+```
+
+**Examples:**
+
+```bash
+# List all builds
+zenml pipeline builds list
+
+# Filter by pipeline
+zenml pipeline builds list --pipeline training_pipeline
+
+# Filter by stack
+zenml pipeline builds list --stack production
+
+# Sort by creation date
+zenml pipeline builds list --sort_by "desc:created"
+```
+
+### Describe a Build
+
+```bash
+zenml pipeline builds describe <BUILD_ID>
+```
+
+### Delete a Build
+
+```bash
+zenml pipeline builds delete <BUILD_ID>
+```
+
+## Pipeline Management
+
+### List Pipelines
+
+```bash
+zenml pipeline list [OPTIONS]
+```
+
+**Examples:**
+
+```bash
+# List all pipelines
+zenml pipeline list
+
+# Filter by name
+zenml pipeline list --name "contains:training"
+
+# Sort by name
+zenml pipeline list --sort_by "asc:name"
+
+# Export to JSON
+zenml pipeline list --output json
+```
+
+### Describe a Pipeline
+
+```bash
+zenml pipeline describe <PIPELINE_NAME_OR_ID>
+```
+
+### Delete a Pipeline
+
+```bash
+zenml pipeline delete <PIPELINE_NAME_OR_ID>
+```
+
+## Configuration Files
+
+Pipeline configuration files define run parameters, stack settings, and more.
+
+### Example Configuration (config.yaml)
+
+```yaml
+# Pipeline-level settings
+enable_cache: true
+enable_artifact_metadata: true
+enable_artifact_visualization: true
+enable_step_logs: true
+
+# Step-level settings
+steps:
+  train_model:
+    enable_cache: false
+    parameters:
+      epochs: 100
+      learning_rate: 0.001
+  
+  evaluate_model:
+    parameters:
+      threshold: 0.85
+
+# Resource requirements
+resources:
+  cpu_count: 4
+  memory: "16GB"
+  gpu_count: 1
+
+# Extra configuration
+extra:
+  tags:
+    - experiment
+    - production-ready
+```
+
+### Using Configuration Files
+
+```bash
+# Run with config
+zenml pipeline run my_module.training_pipeline --config config.yaml
+
+# Build with config
+zenml pipeline build my_module.training_pipeline --config config.yaml
+
+# Deploy with config
+zenml pipeline deploy my_module.training_pipeline --config deploy_config.yaml
+```
+
+## Pipeline Status Values
+
+Pipeline runs can have the following statuses:
+
+| Status | Description |
+|--------|-------------|
+| `initializing` | Run is being initialized |
+| `running` | Run is currently executing |
+| `completed` | Run finished successfully |
+| `failed` | Run failed with an error |
+| `cached` | Run was skipped due to caching |
+
+## Best Practices
+
+### Source Path Format
+
+Always use the format `module.submodule.pipeline_instance`:
+
+```python
+# my_module/pipelines.py
+from zenml import pipeline
+
+@pipeline
+def training_pipeline(...):
+    ...
+
+# Create instance
+training_pipeline_instance = training_pipeline()
+```
+
+```bash
+# Reference the instance, not the decorator
+zenml pipeline register my_module.pipelines.training_pipeline_instance
+```
+
+### Working Directory
+
+Run CLI commands from your project root (where `zenml init` was executed):
+
+```bash
+cd /path/to/project
+zenml pipeline run my_module.training_pipeline
+```
+
+### Build Reuse
+
+Reuse builds to save time:
+
+```bash
+# Build once
+zenml pipeline build my_module.training_pipeline --output build.yaml
+
+# Run multiple times with same build
+zenml pipeline run my_module.training_pipeline --build build.yaml
+zenml pipeline run my_module.training_pipeline --build build.yaml --stack staging
+```
+
+### Monitoring Runs
+
+Use filtering and sorting to monitor pipeline health:
+
+```bash
+# Check for recent failures
+zenml pipeline runs list --status failed --sort_by "desc:created" --limit 5
+
+# Monitor specific pipeline
+zenml pipeline runs list --pipeline training_pipeline --status running
+
+# Daily summary
+zenml pipeline runs list --created "gte:$(date -u +"%Y-%m-%d 00:00:00")"
+```
+
+## Troubleshooting
+
+### Import Errors
+
+```
+Unable to import module 'my_module'. Make sure the source path is
+relative to your source root.
+```
+
+**Solution:** Run from your project root where `zenml init` was executed.
+
+### Pipeline Not Found
+
+```
+The given source path 'my_module.training_pipeline' does not resolve
+to a pipeline object.
+```
+
+**Solution:** Ensure you're referencing a pipeline instance, not the decorator.
+
+### Build Failures
+
+If builds fail, check:
+1. Docker is running (`docker ps`)
+2. Stack has a container registry configured
+3. You have permission to push to the registry
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Stacks" icon="layer-group" href="/cli/stack">
+    Set up execution environments for pipelines
+  </Card>
+  <Card title="Manage Deployments" icon="rocket" href="/cli/deployment">
+    Learn about long-running pipeline deployments
+  </Card>
+  <Card title="Install Integrations" icon="puzzle-piece" href="/cli/integration">
+    Add orchestrators and other components
+  </Card>
+  <Card title="View in Dashboard" icon="chart-line">
+    Access the web UI for visual pipeline monitoring
+  </Card>
+</CardGroup>

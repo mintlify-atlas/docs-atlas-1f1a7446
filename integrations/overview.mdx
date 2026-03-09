@@ -1,0 +1,241 @@
+---
+title: Integration System Overview
+description: Extend ZenML with cloud platforms, ML tools, and orchestrators
+---
+
+ZenML's integration system allows you to extend the core framework with support for popular cloud platforms, ML tools, and orchestration systems. Each integration provides specialized stack components that seamlessly work together.
+
+## How Integrations Work
+
+Integrations are optional extensions that add new flavors of stack components to ZenML. When you install an integration, you get:
+
+- **Stack Components**: Orchestrators, artifact stores, experiment trackers, etc.
+- **Service Connectors**: Authentication and resource management for cloud platforms
+- **Materializers**: Custom serialization for integration-specific data types
+- **Step Operators**: Execute individual steps on specialized infrastructure
+
+## Installation
+
+Install integrations using the `zenml[integration-name]` syntax:
+
+```bash
+# Install a single integration
+pip install "zenml[aws]"
+
+# Install multiple integrations
+pip install "zenml[aws,gcp,mlflow]"
+
+# Install all integrations
+pip install "zenml[all]"
+```
+
+You can also use the ZenML CLI:
+
+```bash
+zenml integration install aws
+zenml integration list
+```
+
+## Available Integrations
+
+<CardGroup cols={2}>
+  <Card title="AWS" icon="aws" href="./aws">
+    Amazon Web Services integration with SageMaker, S3, and ECR
+  </Card>
+  <Card title="Google Cloud" icon="google" href="./gcp">
+    GCP integration with Vertex AI, GCS, and GCR
+  </Card>
+  <Card title="Azure" icon="microsoft" href="./azure">
+    Microsoft Azure with AzureML and Blob Storage
+  </Card>
+  <Card title="Kubernetes" icon="dharmachakra" href="./kubernetes">
+    Native Kubernetes orchestration and deployment
+  </Card>
+  <Card title="Kubeflow" icon="sitemap" href="./kubeflow">
+    Kubeflow Pipelines orchestration
+  </Card>
+  <Card title="MLflow" icon="chart-line" href="./mlflow">
+    MLflow experiment tracking and model registry
+  </Card>
+  <Card title="W&B" icon="wandb" href="./wandb">
+    Weights & Biases experiment tracking
+  </Card>
+  <Card title="SageMaker" icon="aws" href="./sagemaker">
+    AWS SageMaker orchestration and step operators
+  </Card>
+  <Card title="Vertex AI" icon="google" href="./vertex-ai">
+    GCP Vertex AI pipelines and training
+  </Card>
+</CardGroup>
+
+## Integration Categories
+
+### Cloud Platform Integrations
+
+Provide comprehensive support for major cloud providers:
+
+- **AWS**: S3 artifact storage, ECR container registry, SageMaker orchestration
+- **GCP**: GCS artifact storage, GCR container registry, Vertex AI orchestration
+- **Azure**: Blob Storage, AzureML orchestration and training
+
+### Orchestrator Integrations
+
+Execute pipelines on specialized orchestration platforms:
+
+- **Kubernetes**: Native k8s orchestration with full Pod customization
+- **Kubeflow**: Kubeflow Pipelines (KFP) v2 orchestration
+- **SageMaker**: AWS SageMaker Pipelines with distributed training
+- **Vertex AI**: GCP Vertex AI Pipelines with AutoML support
+
+### Experiment Tracking Integrations
+
+Track experiments and compare runs:
+
+- **MLflow**: Open-source experiment tracking with model registry
+- **Weights & Biases**: Cloud-based tracking with collaboration features
+
+## Stack Components by Integration
+
+Each integration provides different types of stack components:
+
+| Integration | Orchestrator | Artifact Store | Container Registry | Experiment Tracker | Step Operator |
+|-------------|--------------|----------------|-------------------|-------------------|---------------|
+| AWS | ✓ | - | ✓ | - | ✓ |
+| GCP | ✓ | ✓ | - | ✓ | ✓ |
+| Azure | ✓ | ✓ | - | - | ✓ |
+| Kubernetes | ✓ | - | - | - | ✓ |
+| Kubeflow | ✓ | - | - | - | - |
+| MLflow | - | - | - | ✓ | - |
+| W&B | - | - | - | ✓ | - |
+
+## Service Connectors
+
+Most cloud integrations include service connectors for authentication:
+
+```python
+from zenml.client import Client
+
+# Create an AWS service connector
+Client().create_service_connector(
+    name="aws-connector",
+    type="aws",
+    auth_method="secret-key",
+    configuration={
+        "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "region": "us-east-1",
+    },
+)
+```
+
+Service connectors can be shared across multiple stack components, making it easy to manage credentials centrally.
+
+## Using Integration Components
+
+After installing an integration, register its components with your stack:
+
+```bash
+# Register a SageMaker orchestrator
+zenml orchestrator register sagemaker-orch \
+    --flavor=sagemaker \
+    --execution_role=arn:aws:iam::123456789:role/SageMakerRole \
+    --region=us-east-1
+
+# Register an MLflow experiment tracker
+zenml experiment-tracker register mlflow-tracker \
+    --flavor=mlflow \
+    --tracking_uri=https://mlflow.example.com
+
+# Create a stack with these components
+zenml stack register prod-stack \
+    -o sagemaker-orch \
+    -e mlflow-tracker \
+    -a s3-artifact-store
+```
+
+## Integration Settings
+
+Many integrations support step-level settings for fine-grained control:
+
+```python
+from zenml import step
+from zenml.integrations.aws.flavors.sagemaker_orchestrator_flavor import (
+    SagemakerOrchestratorSettings,
+)
+
+@step(
+    settings={
+        "orchestrator": SagemakerOrchestratorSettings(
+            instance_type="ml.p3.2xlarge",
+            volume_size_in_gb=100,
+        )
+    }
+)
+def train_model() -> None:
+    # This step runs on a GPU instance
+    ...
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Install Only What You Need">
+    Integration dependencies can be large. Only install integrations you actively use to keep your environment lean:
+    
+    ```bash
+    # Good: Install specific integrations
+    pip install "zenml[aws,mlflow]"
+    
+    # Avoid: Installing all integrations unnecessarily
+    pip install "zenml[all]"  # Only for testing
+    ```
+  </Accordion>
+
+  <Accordion title="Use Service Connectors">
+    Service connectors provide centralized credential management and automatic authentication:
+    
+    - Store credentials once, use across multiple components
+    - Support multiple authentication methods (keys, roles, service accounts)
+    - Automatic credential refresh for cloud platforms
+    - Audit trails for credential usage
+  </Accordion>
+
+  <Accordion title="Separate Dev and Prod Stacks">
+    Use different stacks for development and production:
+    
+    ```bash
+    # Development: local execution, fast iteration
+    zenml stack register dev -o local -a local
+    
+    # Production: cloud execution, scalability
+    zenml stack register prod -o sagemaker -a s3 -e mlflow
+    ```
+  </Accordion>
+
+  <Accordion title="Version Lock in Production">
+    Pin integration versions in production environments:
+    
+    ```bash
+    # requirements.txt
+    zenml[aws]==0.55.0
+    zenml[mlflow]==0.55.0
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cloud Integrations" href="./aws">
+    Learn about AWS, GCP, and Azure integrations
+  </Card>
+  <Card title="Orchestrators" href="./kubernetes">
+    Explore orchestration options
+  </Card>
+  <Card title="Experiment Tracking" href="./mlflow">
+    Track and compare experiments
+  </Card>
+  <Card title="Service Connectors" href="../stack-components/service-connectors">
+    Set up authentication
+  </Card>
+</CardGroup>

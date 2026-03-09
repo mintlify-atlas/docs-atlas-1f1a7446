@@ -1,0 +1,534 @@
+---
+title: Kubernetes Integration
+description: Run ZenML pipelines natively on Kubernetes clusters
+---
+
+The Kubernetes integration provides native orchestration capabilities for running ZenML pipelines on Kubernetes clusters, with full control over pod configuration and resources.
+
+## Installation
+
+```bash
+pip install "zenml[kubernetes]"
+```
+
+This installs:
+- `kubernetes>=21.7,<26` - Kubernetes Python client
+- `Jinja2` - Template engine for Kubernetes manifests
+
+## Available Components
+
+The Kubernetes integration provides these stack components:
+
+<CardGroup cols={2}>
+  <Card title="Kubernetes Orchestrator" icon="diagram-project">
+    Execute complete pipelines as Kubernetes Jobs
+  </Card>
+  <Card title="Kubernetes Step Operator" icon="shoe-prints">
+    Run individual steps as Kubernetes Pods
+  </Card>
+</CardGroup>
+
+## Kubernetes Orchestrator
+
+The Kubernetes orchestrator runs your complete pipeline by creating a Kubernetes Job for each step.
+
+### Configuration
+
+```bash
+zenml orchestrator register k8s-orch \
+    --flavor=kubernetes \
+    --kubernetes_context=my-cluster-context \
+    --kubernetes_namespace=zenml
+```
+
+**Optional Parameters:**
+- `kubernetes_context` - kubectl context name (defaults to current context)
+- `kubernetes_namespace` - Namespace for pipeline pods (default: `zenml`)
+- `synchronous` - Wait for pipeline completion (default: `True`)
+- `skip_local_validations` - Skip local kubectl checks (default: `False`)
+
+### Prerequisites
+
+Before using the Kubernetes orchestrator:
+
+1. **Running Kubernetes cluster** with kubectl access
+2. **Container registry** accessible from the cluster
+3. **kubectl configured** with correct context
+4. **Namespace created** (if not using default)
+
+```bash
+# Create namespace
+kubectl create namespace zenml
+
+# Verify connectivity
+kubectl get nodes
+```
+
+### Step-Level Pod Configuration
+
+Customize Kubernetes Pods for individual steps using `KubernetesPodSettings`:
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.kubernetes.pod_settings import KubernetesPodSettings
+
+@step(
+    settings={
+        "orchestrator.kubernetes": KubernetesPodSettings(
+            node_selectors={"kubernetes.io/hostname": "gpu-node-1"},
+            resources={
+                "requests": {"memory": "16Gi", "cpu": "4"},
+                "limits": {"memory": "16Gi", "cpu": "4", "nvidia.com/gpu": "1"},
+            },
+            annotations={"prometheus.io/scrape": "true"},
+            labels={"team": "ml-ops", "component": "training"},
+            tolerations=[
+                {
+                    "key": "gpu",
+                    "operator": "Equal",
+                    "value": "true",
+                    "effect": "NoSchedule",
+                }
+            ],
+            affinity={
+                "nodeAffinity": {
+                    "requiredDuringSchedulingIgnoredDuringExecution": {
+                        "nodeSelectorTerms": [
+                            {
+                                "matchExpressions": [
+                                    {
+                                        "key": "accelerator",
+                                        "operator": "In",
+                                        "values": ["nvidia-tesla-v100"],
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            },
+            volumes=[
+                {
+                    "name": "data-volume",
+                    "persistentVolumeClaim": {"claimName": "training-data-pvc"},
+                }
+            ],
+            volume_mounts=[
+                {"name": "data-volume", "mountPath": "/data"}
+            ],
+        )
+    }
+)
+def train_on_gpu(data: pd.DataFrame) -> Model:
+    # Training code with GPU access
+    ...
+
+@step
+def preprocess_data() -> pd.DataFrame:
+    # Preprocessing with default settings
+    ...
+
+@pipeline
+def training_pipeline():
+    data = preprocess_data()
+    train_on_gpu(data)
+```
+
+**Available Pod Settings:**
+- `node_selectors` - Select nodes by labels
+- `affinity` - Advanced node selection rules
+- `tolerations` - Allow scheduling on tainted nodes
+- `resources` - CPU, memory, and GPU requests/limits
+- `annotations` - Pod annotations
+- `labels` - Pod labels
+- `volumes` - Volumes to attach
+- `volume_mounts` - Where to mount volumes
+- `env` - Environment variables
+- `service_account_name` - Kubernetes service account
+- `host_ipc` - Use host IPC namespace (for shared memory)
+
+### Resource Management
+
+**CPU and Memory:**
+
+```python
+KubernetesPodSettings(
+    resources={
+        "requests": {"cpu": "2", "memory": "8Gi"},
+        "limits": {"cpu": "4", "memory": "16Gi"},
+    }
+)
+```
+
+- `requests` - Guaranteed resources, affects scheduling
+- `limits` - Maximum resources, container is killed if exceeded
+
+**GPUs:**
+
+```python
+KubernetesPodSettings(
+    resources={
+        "limits": {
+            "nvidia.com/gpu": "2",  # NVIDIA GPUs
+            # or "amd.com/gpu": "1"  # AMD GPUs
+        }
+    },
+    node_selectors={"accelerator": "nvidia-tesla-v100"},
+)
+```
+
+Note: GPUs are only specified in `limits`, not `requests`.
+
+### Node Selection Strategies
+
+**Simple Node Selection:**
+
+```python
+KubernetesPodSettings(
+    node_selectors={
+        "kubernetes.io/hostname": "specific-node",
+        "node.kubernetes.io/instance-type": "n1-standard-4",
+    }
+)
+```
+
+**Advanced Affinity:**
+
+```python
+KubernetesPodSettings(
+    affinity={
+        "nodeAffinity": {
+            "preferredDuringSchedulingIgnoredDuringExecution": [
+                {
+                    "weight": 1,
+                    "preference": {
+                        "matchExpressions": [
+                            {
+                                "key": "instance-type",
+                                "operator": "In",
+                                "values": ["gpu"],
+                            }
+                        ]
+                    },
+                }
+            ]
+        },
+        "podAntiAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": [
+                {
+                    "labelSelector": {
+                        "matchLabels": {"app": "training"},
+                    },
+                    "topologyKey": "kubernetes.io/hostname",
+                }
+            ]
+        },
+    }
+)
+```
+
+**Tolerations (for tainted nodes):**
+
+```python
+KubernetesPodSettings(
+    tolerations=[
+        {
+            "key": "dedicated",
+            "operator": "Equal",
+            "value": "ml-training",
+            "effect": "NoSchedule",
+        },
+        {
+            "key": "gpu",
+            "operator": "Exists",
+            "effect": "NoSchedule",
+        },
+    ]
+)
+```
+
+### Persistent Storage
+
+**Using Persistent Volume Claims:**
+
+```python
+KubernetesPodSettings(
+    volumes=[
+        {
+            "name": "training-data",
+            "persistentVolumeClaim": {"claimName": "ml-data-pvc"},
+        }
+    ],
+    volume_mounts=[
+        {
+            "name": "training-data",
+            "mountPath": "/mnt/data",
+            "readOnly": False,
+        }
+    ],
+)
+```
+
+**Using ConfigMaps:**
+
+```python
+KubernetesPodSettings(
+    volumes=[
+        {
+            "name": "config",
+            "configMap": {"name": "training-config"},
+        }
+    ],
+    volume_mounts=[
+        {"name": "config", "mountPath": "/etc/config"}
+    ],
+)
+```
+
+**Using Secrets:**
+
+```python
+KubernetesPodSettings(
+    volumes=[
+        {
+            "name": "secrets",
+            "secret": {"secretName": "ml-credentials"},
+        }
+    ],
+    volume_mounts=[
+        {"name": "secrets", "mountPath": "/etc/secrets", "readOnly": True}
+    ],
+)
+```
+
+## Kubernetes Step Operator
+
+The step operator runs individual steps as Kubernetes Pods, allowing hybrid execution.
+
+### Configuration
+
+```bash
+zenml step-operator register k8s-step-op \
+    --flavor=kubernetes \
+    --kubernetes_context=my-cluster-context \
+    --kubernetes_namespace=zenml
+```
+
+### Usage
+
+```python
+from zenml import step, pipeline
+
+@step(step_operator="k8s-step-op")
+def train_on_k8s(data: pd.DataFrame) -> Model:
+    # This step runs in Kubernetes
+    ...
+
+@step
+def preprocess_locally(raw_data: pd.DataFrame) -> pd.DataFrame:
+    # This step runs locally
+    ...
+
+@pipeline
+def hybrid_pipeline():
+    data = preprocess_locally(...)  # Local execution
+    model = train_on_k8s(data)  # Kubernetes execution
+```
+
+## Service Account Setup
+
+Create a Kubernetes service account for pipelines:
+
+```yaml
+# zenml-service-account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zenml-sa
+  namespace: zenml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: zenml-role
+  namespace: zenml
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: zenml-role-binding
+  namespace: zenml
+subjects:
+  - kind: ServiceAccount
+    name: zenml-sa
+    namespace: zenml
+roleRef:
+  kind: Role
+  name: zenml-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Apply and use:
+
+```bash
+kubectl apply -f zenml-service-account.yaml
+```
+
+```python
+KubernetesPodSettings(service_account_name="zenml-sa")
+```
+
+## Complete Stack Example
+
+```bash
+# Register container registry
+zenml container-registry register docker-registry \
+    --flavor=default \
+    --uri=docker.io/myusername
+
+# Register orchestrator
+zenml orchestrator register k8s-orch \
+    --flavor=kubernetes \
+    --kubernetes_context=prod-cluster \
+    --kubernetes_namespace=zenml-prod
+
+# Register artifact store (accessible from cluster)
+zenml artifact-store register s3-store \
+    --flavor=s3 \
+    --path=s3://my-ml-artifacts
+
+# Create stack
+zenml stack register k8s-prod \
+    -o k8s-orch \
+    -a s3-store \
+    -c docker-registry
+
+# Activate
+zenml stack set k8s-prod
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Resource Quotas">
+    Prevent resource exhaustion with quotas:
+    
+    ```yaml
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: zenml-quota
+      namespace: zenml
+    spec:
+      hard:
+        requests.cpu: "100"
+        requests.memory: 200Gi
+        limits.cpu: "200"
+        limits.memory: 400Gi
+        nvidia.com/gpu: "10"
+    ```
+  </Accordion>
+
+  <Accordion title="Use Pod Security Standards">
+    Apply pod security policies:
+    
+    ```yaml
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: zenml
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/audit: restricted
+        pod-security.kubernetes.io/warn: restricted
+    ```
+  </Accordion>
+
+  <Accordion title="Monitor Resource Usage">
+    Use metrics-server to monitor resource consumption:
+    
+    ```bash
+    kubectl top pods -n zenml
+    kubectl top nodes
+    ```
+  </Accordion>
+
+  <Accordion title="Use Init Containers for Setup">
+    Use init containers for preprocessing:
+    
+    ```python
+    KubernetesPodSettings(
+        init_containers=[
+            {
+                "name": "data-downloader",
+                "image": "busybox",
+                "command": ["sh", "-c", "wget -O /data/dataset.csv https://example.com/data.csv"],
+                "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+            }
+        ]
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="ImagePullBackOff">
+    If pods can't pull images:
+    
+    1. Verify container registry credentials
+    2. Create image pull secret:
+       ```bash
+       kubectl create secret docker-registry regcred \
+         --docker-server=docker.io \
+         --docker-username=myuser \
+         --docker-password=mypass \
+         -n zenml
+       ```
+    3. Add to pod settings:
+       ```python
+       KubernetesPodSettings(image_pull_secrets=["regcred"])
+       ```
+  </Accordion>
+
+  <Accordion title="Insufficient Resources">
+    If pods remain pending:
+    
+    1. Check node resources: `kubectl describe nodes`
+    2. View pod events: `kubectl describe pod POD_NAME -n zenml`
+    3. Lower resource requests or add more nodes
+  </Accordion>
+
+  <Accordion title="Permission Denied">
+    If you see RBAC errors:
+    
+    1. Verify service account exists
+    2. Check role bindings are correct
+    3. Ensure kubectl context has permissions
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Kubeflow Integration" href="./kubeflow">
+    Use Kubeflow Pipelines on Kubernetes
+  </Card>
+  <Card title="Container Registries" href="../stack-components/container-registries">
+    Configure image registries
+  </Card>
+  <Card title="Remote Execution" href="../user-guide/production">
+    Production deployment patterns
+  </Card>
+  <Card title="Kubernetes Docs" href="https://kubernetes.io/docs/">
+    Official Kubernetes documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,610 @@
+---
+title: Stack Components
+description: Understanding ZenML stack components and their roles
+---
+
+Stack components are the building blocks of a ZenML stack. Each component represents a different category of infrastructure or tooling that your ML workflows need. Understanding these components helps you build the right infrastructure for your use case.
+
+## Component Types
+
+ZenML defines several stack component types, each serving a specific purpose in the ML workflow:
+
+### Required Components
+
+Every stack must include these two components:
+
+<CardGroup cols={2}>
+  <Card title="Orchestrator" icon="sitemap">
+    Controls pipeline execution, scheduling, and step coordination. Determines where and how your pipeline runs.
+  </Card>
+  
+  <Card title="Artifact Store" icon="database">
+    Stores all artifacts (data, models, etc.) produced by pipeline steps. Provides versioned storage.
+  </Card>
+</CardGroup>
+
+### Optional Components
+
+These components add specialized functionality:
+
+<CardGroup cols={2}>
+  <Card title="Container Registry" icon="box">
+    Stores Docker images for containerized step execution.
+  </Card>
+  
+  <Card title="Step Operator" icon="server">
+    Runs specific steps on specialized infrastructure (GPUs, distributed compute).
+  </Card>
+  
+  <Card title="Experiment Tracker" icon="chart-line">
+    Logs metrics, parameters, and artifacts for experiment tracking.
+  </Card>
+  
+  <Card title="Model Deployer" icon="rocket">
+    Deploys trained models as prediction services.
+  </Card>
+  
+  <Card title="Model Registry" icon="books">
+    Manages model versions, metadata, and lifecycle stages.
+  </Card>
+  
+  <Card title="Feature Store" icon="table">
+    Serves features for training and real-time inference.
+  </Card>
+  
+  <Card title="Data Validator" icon="check-double">
+    Validates data quality and schema compliance.
+  </Card>
+  
+  <Card title="Alerter" icon="bell">
+    Sends notifications via Slack, email, or other channels.
+  </Card>
+  
+  <Card title="Annotator" icon="pen-to-square">
+    Manages data annotation workflows and labeling.
+  </Card>
+  
+  <Card title="Image Builder" icon="hammer">
+    Builds Docker images for containerized execution.
+  </Card>
+</CardGroup>
+
+## Orchestrators
+
+Orchestrators are the brain of your pipeline execution. They determine how steps are executed and scheduled.
+
+### Available Orchestrators
+
+```python
+# Local Orchestrator - Run in your local environment
+zenml orchestrator register local_orch --flavor=local
+
+# Kubernetes - Run on Kubernetes cluster
+zenml orchestrator register k8s_orch \
+    --flavor=kubernetes \
+    --kubernetes_context=my-cluster \
+    --kubernetes_namespace=zenml
+
+# Kubeflow - Run on Kubeflow Pipelines
+zenml orchestrator register kfp_orch \
+    --flavor=kubeflow \
+    --kubeflow_hostname=https://kubeflow.example.com
+
+# Vertex AI - Run on Google Cloud Vertex AI
+zenml orchestrator register vertex_orch \
+    --flavor=vertex \
+    --project=my-gcp-project \
+    --location=us-central1
+
+# Airflow - Run on Apache Airflow
+zenml orchestrator register airflow_orch \
+    --flavor=airflow \
+    --airflow_home=/path/to/airflow
+```
+
+### Using Orchestrators
+
+```python
+from zenml import pipeline
+
+@pipeline
+def my_pipeline():
+    """Pipeline runs on the active stack's orchestrator."""
+    step_one()
+    step_two()
+
+# The orchestrator determines execution:
+# - Local: Sequential execution in current process
+# - Kubernetes: Distributed execution across pods
+# - Vertex AI: Managed execution on Google Cloud
+```
+
+## Artifact Stores
+
+Artifact stores provide persistent storage for all pipeline artifacts.
+
+### Available Artifact Stores
+
+```bash
+# Local - Store on local filesystem
+zenml artifact-store register local_store \
+    --flavor=local \
+    --path=/path/to/artifacts
+
+# AWS S3 - Store on Amazon S3
+zenml artifact-store register s3_store \
+    --flavor=s3 \
+    --path=s3://my-bucket/artifacts
+
+# Google Cloud Storage - Store on GCS
+zenml artifact-store register gcs_store \
+    --flavor=gcp \
+    --path=gs://my-bucket/artifacts
+
+# Azure Blob Storage - Store on Azure
+zenml artifact-store register azure_store \
+    --flavor=azure \
+    --path=az://my-container/artifacts
+```
+
+### Accessing Artifact Store
+
+```python
+from zenml.client import Client
+
+client = Client()
+artifact_store = client.active_stack.artifact_store
+
+print(f"Artifacts stored at: {artifact_store.path}")
+print(f"Flavor: {artifact_store.flavor}")
+```
+
+## Container Registries
+
+Container registries store Docker images for containerized step execution.
+
+### Available Container Registries
+
+```bash
+# DockerHub
+zenml container-registry register dockerhub \
+    --flavor=dockerhub \
+    --uri=docker.io/myusername
+
+# AWS ECR
+zenml container-registry register ecr \
+    --flavor=aws \
+    --uri=123456789.dkr.ecr.us-east-1.amazonaws.com
+
+# Google Artifact Registry
+zenml container-registry register gar \
+    --flavor=gcp \
+    --uri=us-central1-docker.pkg.dev/my-project/my-repo
+
+# Azure Container Registry
+zenml container-registry register acr \
+    --flavor=azure \
+    --uri=myregistry.azurecr.io
+```
+
+### When Are Containers Used?
+
+Containers are built when:
+- Running on remote orchestrators (Kubernetes, Vertex AI, etc.)
+- Using step operators
+- Explicitly configured via Docker settings
+
+```python
+from zenml import pipeline
+from zenml.config import DockerSettings
+
+@pipeline(
+    settings={
+        "docker": DockerSettings(
+            requirements=["tensorflow==2.13.0"],
+            parent_image="tensorflow/tensorflow:latest-gpu"
+        )
+    }
+)
+def containerized_pipeline():
+    """This pipeline runs in containers."""
+    train_model()
+```
+
+## Step Operators
+
+Step operators run individual steps on specialized infrastructure.
+
+### Use Cases
+
+- GPU-intensive training steps
+- Distributed computation
+- Steps requiring different resources than the orchestrator
+
+### Available Step Operators
+
+```bash
+# Kubernetes
+zenml step-operator register k8s_step_op \
+    --flavor=kubernetes \
+    --kubernetes_context=my-cluster \
+    --kubernetes_namespace=training
+
+# Vertex AI
+zenml step-operator register vertex_step_op \
+    --flavor=vertex \
+    --project=my-project \
+    --region=us-central1 \
+    --machine_type=n1-highmem-16
+
+# SageMaker
+zenml step-operator register sagemaker_step_op \
+    --flavor=sagemaker \
+    --role=arn:aws:iam::123456789:role/SageMakerRole \
+    --instance_type=ml.p3.2xlarge
+```
+
+### Using Step Operators
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    step_operator="vertex_step_op",
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=8,
+            gpu_count=2,
+            memory="32GB"
+        )
+    }
+)
+def gpu_training_step(data: pd.DataFrame) -> Any:
+    """This step runs on Vertex AI with 2 GPUs."""
+    model = train_on_gpu(data)
+    return model
+
+@step
+def regular_step() -> pd.DataFrame:
+    """This step runs on the orchestrator."""
+    return load_data()
+
+@pipeline
+def hybrid_pipeline():
+    data = regular_step()  # Runs on orchestrator
+    model = gpu_training_step(data)  # Runs on step operator
+```
+
+## Experiment Trackers
+
+Experiment trackers log metrics, parameters, and artifacts during training.
+
+### Available Experiment Trackers
+
+```bash
+# MLflow
+zenml experiment-tracker register mlflow_tracker \
+    --flavor=mlflow \
+    --tracking_uri=http://localhost:5000
+
+# Weights & Biases
+zenml experiment-tracker register wandb_tracker \
+    --flavor=wandb \
+    --entity=my-team \
+    --project=my-project
+
+# Neptune
+zenml experiment-tracker register neptune_tracker \
+    --flavor=neptune \
+    --project=my-workspace/my-project
+```
+
+### Using Experiment Trackers
+
+```python
+from zenml import step
+from zenml.client import Client
+import mlflow
+
+@step(experiment_tracker="mlflow_tracker")
+def training_step(data: pd.DataFrame) -> Any:
+    """Step with experiment tracking."""
+    
+    # MLflow is automatically configured
+    mlflow.log_param("learning_rate", 0.01)
+    mlflow.log_param("batch_size", 32)
+    
+    model = train_model(data)
+    
+    mlflow.log_metric("accuracy", 0.95)
+    mlflow.log_metric("loss", 0.05)
+    
+    return model
+```
+
+## Model Deployers
+
+Model deployers deploy trained models as prediction services.
+
+### Available Model Deployers
+
+```bash
+# Seldon Core
+zenml model-deployer register seldon_deployer \
+    --flavor=seldon \
+    --kubernetes_context=my-cluster
+
+# BentoML
+zenml model-deployer register bentoml_deployer \
+    --flavor=bentoml
+
+# MLflow
+zenml model-deployer register mlflow_deployer \
+    --flavor=mlflow
+```
+
+### Deploying Models
+
+```python
+from zenml import step, pipeline
+from zenml.integrations.seldon.steps import seldon_model_deployer_step
+
+@step
+def train_step() -> Any:
+    model = train_model()
+    return model
+
+@pipeline
+def deployment_pipeline():
+    model = train_step()
+    
+    # Deploy model as a service
+    seldon_model_deployer_step(
+        model=model,
+        service_config={"name": "my-model-service"}
+    )
+```
+
+## Model Registries
+
+Model registries manage model versions and metadata.
+
+### Available Model Registries
+
+```bash
+# MLflow
+zenml model-registry register mlflow_registry \
+    --flavor=mlflow \
+    --uri=http://localhost:5000
+
+# AWS SageMaker
+zenml model-registry register sagemaker_registry \
+    --flavor=sagemaker \
+    --region=us-east-1
+```
+
+### Using Model Registry
+
+```python
+from zenml import step, Model
+from zenml.client import Client
+
+@step
+def register_model_step(model: Any) -> None:
+    """Register model in the registry."""
+    client = Client()
+    
+    # Model is automatically registered if model registry is in stack
+    model_registry = client.active_stack.model_registry
+    
+    if model_registry:
+        model_registry.register_model(
+            name="my_model",
+            version="v1.0",
+            model_source_uri="path/to/model"
+        )
+```
+
+## Feature Stores
+
+Feature stores serve features for training and inference.
+
+### Available Feature Stores
+
+```bash
+# Feast
+zenml feature-store register feast_store \
+    --flavor=feast \
+    --feast_repo=/path/to/feast/repo
+```
+
+### Using Feature Stores
+
+```python
+from zenml import step
+
+@step
+def get_features_step(entity_ids: list) -> pd.DataFrame:
+    """Retrieve features from feature store."""
+    from zenml.client import Client
+    
+    feature_store = Client().active_stack.feature_store
+    
+    features = feature_store.get_online_features(
+        feature_refs=["feature_view:feature_1", "feature_view:feature_2"],
+        entity_rows=[{"entity_id": id} for id in entity_ids]
+    )
+    
+    return features.to_df()
+```
+
+## Data Validators
+
+Data validators check data quality and schema.
+
+### Available Data Validators
+
+```bash
+# Great Expectations
+zenml data-validator register ge_validator \
+    --flavor=great_expectations
+
+# Evidently
+zenml data-validator register evidently_validator \
+    --flavor=evidently
+```
+
+### Using Data Validators
+
+```python
+from zenml import step
+import pandas as pd
+
+@step
+def validate_data_step(data: pd.DataFrame) -> pd.DataFrame:
+    """Validate data quality."""
+    from zenml.integrations.great_expectations.steps import (
+        great_expectations_validator_step
+    )
+    
+    # Define expectations
+    expectations = {
+        "expect_column_to_exist": {"column": "feature_1"},
+        "expect_column_values_to_not_be_null": {"column": "feature_1"}
+    }
+    
+    # Validation happens automatically if data validator in stack
+    return data
+```
+
+## Alerters
+
+Alerters send notifications when pipelines succeed or fail.
+
+### Available Alerters
+
+```bash
+# Slack
+zenml alerter register slack_alerter \
+    --flavor=slack \
+    --slack_token={{slack.token}} \
+    --default_slack_channel_id=C1234567890
+
+# Discord
+zenml alerter register discord_alerter \
+    --flavor=discord \
+    --discord_webhook_url={{discord.webhook}}
+```
+
+### Using Alerters
+
+```python
+from zenml import pipeline, step
+
+def on_failure(exception: BaseException):
+    """Send alert on failure."""
+    from zenml.client import Client
+    
+    alerter = Client().active_stack.alerter
+    if alerter:
+        alerter.post(
+            message=f"Pipeline failed: {exception}",
+            params={"title": "Pipeline Failure"}
+        )
+
+@pipeline(on_failure=on_failure)
+def monitored_pipeline():
+    risky_step()
+```
+
+## Component Configuration
+
+### View Component Details
+
+```bash
+# List all components of a type
+zenml orchestrator list
+
+# Describe specific component
+zenml orchestrator describe kubernetes_orch
+
+# Update component
+zenml orchestrator update kubernetes_orch \
+    --kubernetes_namespace=production
+```
+
+### Programmatic Access
+
+```python
+from zenml.client import Client
+from zenml.enums import StackComponentType
+
+client = Client()
+
+# List all orchestrators
+orchestrators = client.list_stack_components(
+    component_type=StackComponentType.ORCHESTRATOR
+)
+
+for orch in orchestrators:
+    print(f"Orchestrator: {orch.name} ({orch.flavor})")
+
+# Get specific component
+artifact_store = client.get_stack_component(
+    component_type=StackComponentType.ARTIFACT_STORE,
+    name_id_or_prefix="s3_store"
+)
+```
+
+## Component Flavors
+
+Each component type has multiple flavors (implementations):
+
+```python
+from zenml.client import Client
+from zenml.enums import StackComponentType
+
+client = Client()
+
+# List available flavors for a component type
+flavors = client.list_flavors(
+    component_type=StackComponentType.ORCHESTRATOR
+)
+
+for flavor in flavors:
+    print(f"Flavor: {flavor.name}")
+    print(f"Integration: {flavor.integration}")
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Begin with local components (local orchestrator, local artifact store) and graduate to cloud components as needed.
+  </Card>
+  
+  <Card title="Match Your Workflow" icon="puzzle-piece">
+    Choose components that fit your actual needs. Don't over-engineer with components you don't use.
+  </Card>
+  
+  <Card title="Test Incrementally" icon="vial">
+    Add one new component at a time and validate it works before adding more.
+  </Card>
+  
+  <Card title="Use Integrations" icon="plug">
+    Install ZenML integrations to get pre-built components: `zenml integration install <integration>`
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Stacks](/concepts/stacks) - Learn how components combine into stacks
+- [Pipelines](/concepts/pipelines) - Understand how pipelines use components
+- [Steps](/concepts/steps) - Configure steps for specific components
+
+## Code Reference
+
+- StackComponent base class: `src/zenml/stack/stack_component.py:67`
+- StackComponentType enum: `src/zenml/enums.py:158`
+- Component flavors: `src/zenml/stack/flavor.py`

@@ -1,0 +1,763 @@
+---
+title: Kubernetes Deployment
+description: Deploy ZenML server on Kubernetes using Helm charts for production environments
+---
+
+# Kubernetes Deployment with Helm
+
+Deploy ZenML server on Kubernetes for production-grade, scalable MLOps infrastructure. ZenML provides official Helm charts that simplify deployment and management on Kubernetes clusters.
+
+## Prerequisites
+
+Before deploying ZenML on Kubernetes, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Kubernetes Cluster" icon="dharmachakra">
+    Running cluster with kubectl access (v1.19+)
+  </Card>
+  
+  <Card title="Helm" icon="helm">
+    Helm 3.x installed and configured
+  </Card>
+  
+  <Card title="Ingress Controller" icon="network-wired">
+    Nginx, Traefik, or similar (optional but recommended)
+  </Card>
+  
+  <Card title="Storage Class" icon="hard-drive">
+    Default StorageClass for persistent volumes
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+### Install ZenML Helm Chart
+
+Deploy ZenML server with default configuration:
+
+```bash
+# Add ZenML Helm repository
+helm repo add zenml https://zenml-io.github.io/zenml
+helm repo update
+
+# Install ZenML server
+helm install zenml-server zenml/zenml \
+  --namespace zenml \
+  --create-namespace
+```
+
+This deploys:
+- ZenML server on port 80
+- SQLite database (for testing)
+- No ingress (ClusterIP service)
+- No authentication
+
+### Verify Installation
+
+Check deployment status:
+
+```bash
+# Check pods
+kubectl get pods -n zenml
+
+# Check service
+kubectl get svc -n zenml
+
+# View logs
+kubectl logs -n zenml -l app.kubernetes.io/name=zenml -f
+```
+
+### Access the Server
+
+Port-forward to access locally:
+
+```bash
+kubectl port-forward -n zenml svc/zenml-server 8080:80
+```
+
+Access at `http://localhost:8080`
+
+## Production Deployment
+
+For production environments, create a custom `values.yaml` file:
+
+```yaml
+# values.yaml
+zenml:
+  # Server configuration
+  replicaCount: 3
+  
+  image:
+    repository: zenmldocker/zenml-server
+    tag: "0.94.0"
+    pullPolicy: IfNotPresent
+  
+  # Server URL (required for production)
+  serverURL: https://zenml.example.com
+  
+  # Authentication
+  auth:
+    authType: OAUTH2_PASSWORD_BEARER
+    jwtSecretKey: "<generate-with-openssl-rand-hex-32>"
+    jwtTokenExpireMinutes: 60
+    corsAllowOrigins:
+      - "https://zenml.example.com"
+  
+  # External MySQL database
+  database:
+    url: "mysql://zenml:password@mysql-host:3306/zenml"
+    # Store password in Kubernetes secret
+    passwordSecretRef:
+      name: zenml-db-secret
+      key: password
+    
+    # Connection pool settings
+    poolSize: 20
+    maxOverflow: 20
+    
+    # SSL configuration
+    ssl: true
+    sslVerifyServerCert: true
+    
+    # Backup strategy
+    backupStrategy: database
+    backupDatabase: zenml_backup
+  
+  # Secrets store (use cloud provider)
+  secretsStore:
+    enabled: true
+    type: aws  # or gcp, azure, hashicorp
+    aws:
+      authMethod: iam-role
+      authConfig:
+        region: us-east-1
+        role_arn: arn:aws:iam::ACCOUNT:role/zenml-secrets-role
+  
+  # Performance tuning
+  threadPoolSize: 40
+  authThreadPoolSize: 5
+  requestTimeout: 20
+  requestCacheTimeout: 300
+  
+  # Ingress configuration
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    host: zenml.example.com
+    path: /
+    tls:
+      enabled: true
+      secretName: zenml-tls-cert
+  
+  # Resource limits
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Service account
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/zenml-server-role
+
+# Security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+```
+
+### Deploy with Custom Values
+
+```bash
+# Create database secret
+kubectl create secret generic zenml-db-secret \
+  --from-literal=password='your-secure-password' \
+  -n zenml
+
+# Install with custom values
+helm install zenml-server zenml/zenml \
+  --namespace zenml \
+  --create-namespace \
+  --values values.yaml
+```
+
+## Database Configuration
+
+### Using External MySQL
+
+Recommended for production. Use managed database services:
+
+<CardGroup cols={3}>
+  <Card title="AWS RDS" icon="aws">
+    Managed MySQL on AWS
+  </Card>
+  
+  <Card title="Google Cloud SQL" icon="google">
+    Managed MySQL on GCP
+  </Card>
+  
+  <Card title="Azure Database" icon="microsoft">
+    Managed MySQL on Azure
+  </Card>
+</CardGroup>
+
+#### AWS RDS Example
+
+```yaml
+zenml:
+  database:
+    url: "mysql://zenml:password@zenml-db.abc123.us-east-1.rds.amazonaws.com:3306/zenml"
+    ssl: true
+    sslCa:
+      value: |
+        -----BEGIN CERTIFICATE-----
+        <AWS RDS CA certificate>
+        -----END CERTIFICATE-----
+```
+
+#### Google Cloud SQL Example
+
+```yaml
+zenml:
+  database:
+    url: "mysql://zenml:password@127.0.0.1:3306/zenml"
+
+# Use Cloud SQL proxy sidecar
+podAnnotations:
+  cloud.google.com/sql-proxy-connection-name: "project:region:instance"
+```
+
+### Database Persistence (SQLite)
+
+For development/testing only:
+
+```yaml
+zenml:
+  database:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClassName: standard
+```
+
+## Secrets Management
+
+### AWS Secrets Manager
+
+```yaml
+zenml:
+  secretsStore:
+    enabled: true
+    type: aws
+    aws:
+      authMethod: iam-role  # or secret-key
+      authConfig:
+        region: us-east-1
+        role_arn: arn:aws:iam::123456789:role/zenml-secrets
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/zenml-secrets
+```
+
+### GCP Secret Manager
+
+```yaml
+zenml:
+  secretsStore:
+    enabled: true
+    type: gcp
+    gcp:
+      authMethod: service-account
+      authConfig:
+        project_id: my-gcp-project
+        service_account_json: |
+          {
+            "type": "service_account",
+            "project_id": "my-gcp-project",
+            ...
+          }
+```
+
+### Azure Key Vault
+
+```yaml
+zenml:
+  secretsStore:
+    enabled: true
+    type: azure
+    azure:
+      authMethod: service-principal
+      authConfig:
+        client_id: "<client-id>"
+        client_secret: "<client-secret>"
+        tenant_id: "<tenant-id>"
+      key_vault_name: zenml-keyvault
+```
+
+### HashiCorp Vault
+
+```yaml
+zenml:
+  secretsStore:
+    enabled: true
+    type: hashicorp
+    hashicorp:
+      authMethod: token  # or app_role, aws
+      authConfig:
+        vault_addr: https://vault.example.com:8200
+        vault_token: "<vault-token>"
+        mount_point: secret
+```
+
+## Ingress Configuration
+
+### Nginx Ingress
+
+```yaml
+zenml:
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    host: zenml.example.com
+    path: /
+    tls:
+      enabled: true
+      secretName: zenml-tls-cert
+```
+
+### Traefik Ingress
+
+```yaml
+zenml:
+  ingress:
+    enabled: true
+    className: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    host: zenml.example.com
+    path: /
+    tls:
+      enabled: true
+      secretName: zenml-tls-cert
+```
+
+### Custom Path (Behind Proxy)
+
+```yaml
+zenml:
+  rootUrlPath: /zenml
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /$1
+    host: example.com
+    path: /zenml/?(.*)
+```
+
+## SSL/TLS Configuration
+
+### Using cert-manager
+
+Install cert-manager:
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+```
+
+Create ClusterIssuer:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+```
+
+Apply issuer:
+
+```bash
+kubectl apply -f cluster-issuer.yaml
+```
+
+### Self-Signed Certificates
+
+```yaml
+zenml:
+  ingress:
+    enabled: true
+    tls:
+      enabled: true
+      generateCerts: true  # Generate self-signed certs
+      secretName: zenml-tls-certs
+```
+
+## Custom CA Certificates
+
+Add custom CA certificates for internal services:
+
+```yaml
+zenml:
+  certificates:
+    customCAs:
+      - name: "corporate-ca"
+        certificate: |
+          -----BEGIN CERTIFICATE-----
+          MIIDXTCCAkWgAwIBAgIJAJC1HiIAZAiIMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+          ...
+          -----END CERTIFICATE-----
+    
+    # Or reference existing secrets
+    secretRefs:
+      - name: "ca-bundle-secret"
+        key: "ca.crt"
+```
+
+## High Availability Setup
+
+### Multiple Replicas
+
+```yaml
+zenml:
+  replicaCount: 3
+  
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - zenml
+          topologyKey: kubernetes.io/hostname
+```
+
+### Pod Disruption Budget
+
+Create PodDisruptionBudget:
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenml-server-pdb
+  namespace: zenml
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zenml
+```
+
+### Horizontal Pod Autoscaling
+
+```yaml
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  
+  # Custom metrics (optional)
+  customMetrics:
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "1000"
+```
+
+## Monitoring and Logging
+
+### Prometheus Metrics
+
+Enable Prometheus monitoring:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
+```
+
+### Logging Configuration
+
+```yaml
+zenml:
+  debug: false
+  environment:
+    ZENML_LOGGING_VERBOSITY: INFO
+    ZENML_ANALYTICS_OPT_IN: "true"
+```
+
+### Health Checks
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 8
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 5
+```
+
+## Upgrade and Rollback
+
+### Upgrade ZenML
+
+```bash
+# Update Helm repository
+helm repo update
+
+# Upgrade to latest version
+helm upgrade zenml-server zenml/zenml \
+  --namespace zenml \
+  --values values.yaml
+
+# Upgrade to specific version
+helm upgrade zenml-server zenml/zenml \
+  --namespace zenml \
+  --version 0.94.0 \
+  --values values.yaml
+```
+
+### Rollback Deployment
+
+```bash
+# View deployment history
+helm history zenml-server -n zenml
+
+# Rollback to previous version
+helm rollback zenml-server -n zenml
+
+# Rollback to specific revision
+helm rollback zenml-server 3 -n zenml
+```
+
+## Backup and Recovery
+
+### Database Backup
+
+Configure automatic backups:
+
+```yaml
+zenml:
+  database:
+    # Backup before migrations
+    backupStrategy: database  # or dump-file, mydumper
+    backupDatabase: zenml_backup
+```
+
+### Manual Backup
+
+```bash
+# Backup MySQL database
+kubectl exec -n zenml mysql-pod -- \
+  mysqldump -u root -p zenml > zenml-backup-$(date +%Y%m%d).sql
+
+# Backup persistent volumes
+kubectl get pv -n zenml
+kubectl get pvc -n zenml
+```
+
+### Restore from Backup
+
+```bash
+# Restore MySQL database
+kubectl exec -i -n zenml mysql-pod -- \
+  mysql -u root -p zenml < zenml-backup-20240309.sql
+```
+
+## Troubleshooting
+
+### Pod Not Starting
+
+Check pod status and events:
+
+```bash
+kubectl describe pod -n zenml -l app.kubernetes.io/name=zenml
+kubectl get events -n zenml --sort-by='.lastTimestamp'
+```
+
+### Database Connection Issues
+
+Test database connectivity:
+
+```bash
+# Port-forward to MySQL
+kubectl port-forward -n zenml svc/mysql 3306:3306
+
+# Test connection
+mysql -h 127.0.0.1 -u zenml -p
+```
+
+### Ingress Not Working
+
+Check ingress configuration:
+
+```bash
+kubectl describe ingress -n zenml
+kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
+```
+
+### View Server Logs
+
+```bash
+# View logs from all replicas
+kubectl logs -n zenml -l app.kubernetes.io/name=zenml --all-containers=true
+
+# Follow logs
+kubectl logs -n zenml -l app.kubernetes.io/name=zenml -f
+
+# View logs from specific pod
+kubectl logs -n zenml zenml-server-0
+```
+
+## Performance Tuning
+
+### Resource Optimization
+
+```yaml
+resources:
+  requests:
+    cpu: 2000m
+    memory: 4Gi
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+
+# Set node affinity for performance
+nodeSelector:
+  node.kubernetes.io/instance-type: c5.xlarge
+```
+
+### Database Connection Pooling
+
+```yaml
+zenml:
+  database:
+    poolSize: 20
+    maxOverflow: 20
+  
+  # Coordinate with thread pools
+  threadPoolSize: 40
+  authThreadPoolSize: 5
+```
+
+### Request Handling
+
+```yaml
+zenml:
+  requestTimeout: 20
+  requestDeduplication: true
+  requestCacheTimeout: 300
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use RBAC" icon="user-lock">
+    Enable Kubernetes RBAC for service account permissions
+  </Card>
+  
+  <Card title="Network Policies" icon="network-wired">
+    Restrict pod-to-pod communication with NetworkPolicies
+  </Card>
+  
+  <Card title="Secret Encryption" icon="key">
+    Enable encryption at rest for Kubernetes Secrets
+  </Card>
+  
+  <Card title="Pod Security" icon="shield">
+    Use Pod Security Standards (restricted profile)
+  </Card>
+  
+  <Card title="Image Scanning" icon="magnifying-glass">
+    Scan container images for vulnerabilities
+  </Card>
+  
+  <Card title="TLS Everywhere" icon="lock">
+    Use TLS for all network communications
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Docker Deployment" href="/deployment/docker" icon="docker">
+    Alternative Docker-based deployment
+  </Card>
+  
+  <Card title="Configuration Guide" href="/how-to/configure-zenml-server" icon="gear">
+    Advanced server configuration
+  </Card>
+  
+  <Card title="Security Setup" href="/how-to/secure-zenml" icon="shield">
+    Secure your deployment
+  </Card>
+</CardGroup>
+
+## Reference
+
+- [Official Helm Chart](https://github.com/zenml-io/zenml/tree/main/helm)
+- [Helm Chart Values Reference](https://github.com/zenml-io/zenml/blob/main/helm/values.yaml)
+- [Kubernetes Documentation](https://kubernetes.io/docs/home/)

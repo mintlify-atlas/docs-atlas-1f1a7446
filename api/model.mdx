@@ -1,0 +1,254 @@
+---
+title: "Model"
+description: "Model class for ZenML's Model Control Plane"
+icon: "cube"
+---
+
+The `Model` class represents a namespace for organizing artifacts, metadata, and other resources related to a machine learning model.
+
+## Signature
+
+```python
+Model(
+    name: str,
+    license: Optional[str] = None,
+    description: Optional[str] = None,
+    audience: Optional[str] = None,
+    use_cases: Optional[str] = None,
+    limitations: Optional[str] = None,
+    trade_offs: Optional[str] = None,
+    ethics: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    version: Optional[Union[ModelStages, int, str]] = None,
+    save_models_to_registry: bool = True,
+)
+```
+
+## Parameters
+
+<ParamField path="name" type="str" required>
+  The name of the model.
+</ParamField>
+
+<ParamField path="license" type="str" optional>
+  The license under which the model is created.
+</ParamField>
+
+<ParamField path="description" type="str" optional>
+  The description of the model.
+</ParamField>
+
+<ParamField path="audience" type="str" optional>
+  The target audience of the model.
+</ParamField>
+
+<ParamField path="use_cases" type="str" optional>
+  The use cases of the model.
+</ParamField>
+
+<ParamField path="limitations" type="str" optional>
+  The known limitations of the model.
+</ParamField>
+
+<ParamField path="trade_offs" type="str" optional>
+  The tradeoffs of the model.
+</ParamField>
+
+<ParamField path="ethics" type="str" optional>
+  The ethical implications of the model.
+</ParamField>
+
+<ParamField path="tags" type="List[str]" optional>
+  Tags associated with the model.
+</ParamField>
+
+<ParamField path="version" type="Union[ModelStages, int, str]" optional>
+  The version name, version number, or stage. If skipped, a new version will be created. Supports placeholders like `{date}` and `{time}`, plus custom placeholders passed as substitutions.
+</ParamField>
+
+<ParamField path="save_models_to_registry" type="bool" default="True">
+  Whether to save all ModelArtifacts to Model Registry if available in the active stack.
+</ParamField>
+
+## Properties
+
+<ResponseField name="id" type="UUID">
+  The unique identifier of the model version.
+</ResponseField>
+
+<ResponseField name="model_id" type="UUID">
+  The unique identifier of the model.
+</ResponseField>
+
+<ResponseField name="number" type="int">
+  The version number of this model version.
+</ResponseField>
+
+<ResponseField name="stage" type="Optional[ModelStages]">
+  The current stage of this model version (e.g., staging, production).
+</ResponseField>
+
+## Methods
+
+### load_artifact
+
+```python
+def load_artifact(
+    name: str,
+    version: Optional[str] = None
+) -> Any
+```
+
+Load an artifact linked to this model version.
+
+**Parameters:**
+- `name` (str): Name of the artifact to load
+- `version` (Optional[str]): Version of the artifact to load
+
+**Returns:** The loaded artifact
+
+### get_artifact
+
+```python
+def get_artifact(
+    name: str,
+    version: Optional[str] = None
+) -> Optional[ArtifactVersionResponse]
+```
+
+Get the artifact response linked to this model version.
+
+### set_stage
+
+```python
+def set_stage(
+    stage: Union[str, ModelStages],
+    force: bool = False
+) -> None
+```
+
+Set this model version to a specific stage.
+
+**Parameters:**
+- `stage`: The target stage (e.g., "staging", "production")
+- `force`: Whether to force archiving of the current version in the target stage
+
+### log_metadata
+
+```python
+def log_metadata(
+    metadata: Dict[str, MetadataType]
+) -> None
+```
+
+Log metadata for this model version.
+
+**Parameters:**
+- `metadata`: Dictionary of metadata key-value pairs
+
+## Examples
+
+### Basic Model Usage
+
+```python
+from zenml import Model, pipeline, step
+
+model = Model(
+    name="iris_classifier",
+    version="1.0.0",
+    description="Iris species classifier",
+    tags=["classification", "iris"]
+)
+
+@pipeline(model=model)
+def training_pipeline():
+    # Pipeline steps
+    pass
+```
+
+### Using Model Stages
+
+```python
+from zenml import Model, ModelStages
+
+# Load production model
+production_model = Model(
+    name="iris_classifier",
+    version=ModelStages.PRODUCTION
+)
+
+# Load specific version
+specific_model = Model(
+    name="iris_classifier",
+    version="1.2.0"
+)
+```
+
+### Loading Artifacts from Model
+
+```python
+from zenml import Model
+
+model = Model(
+    name="iris_classifier",
+    version="production"
+)
+
+# Load a specific artifact
+training_data = model.load_artifact("training_data")
+model_weights = model.load_artifact("model", version="3")
+```
+
+### Logging Model Metadata
+
+```python
+from zenml import step, Model
+
+@step(model=Model(name="my_model"))
+def train_model():
+    # Training code
+    accuracy = 0.95
+    
+    from zenml import get_step_context
+    context = get_step_context()
+    
+    context.model.log_metadata({
+        "accuracy": accuracy,
+        "framework": "sklearn",
+        "dataset_size": 1000
+    })
+```
+
+### Promoting Model to Stage
+
+```python
+from zenml import Model, ModelStages
+
+model = Model(
+    name="iris_classifier",
+    version="1.5.0"
+)
+
+# Promote to staging
+model.set_stage(ModelStages.STAGING)
+
+# Promote to production (force replace current production model)
+model.set_stage(ModelStages.PRODUCTION, force=True)
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@pipeline" href="./pipeline" icon="code">
+    Configure model in pipelines
+  </Card>
+  <Card title="@step" href="./step" icon="code">
+    Configure model in steps
+  </Card>
+  <Card title="log_model_metadata" href="./log-model-metadata" icon="tag">
+    Log model metadata
+  </Card>
+  <Card title="link_artifact_to_model" href="./link-artifact-to-model" icon="link">
+    Link artifacts to models
+  </Card>
+</CardGroup>

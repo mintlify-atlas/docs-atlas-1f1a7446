@@ -1,0 +1,129 @@
+---
+title: Stack Components Overview
+description: Understanding ZenML's modular stack architecture
+---
+
+# Stack Components Overview
+
+ZenML's stack is the foundation of your MLOps infrastructure. A stack is composed of multiple components that work together to run your ML pipelines. Each component handles a specific aspect of the pipeline execution, from orchestration to artifact storage.
+
+## What is a Stack?
+
+A stack is essentially all the configuration for the infrastructure of your MLOps platform. It's made up of multiple components that define where and how your pipelines run.
+
+Every ZenML stack requires at minimum:
+- **Orchestrator**: Manages pipeline execution
+- **Artifact Store**: Stores pipeline artifacts and outputs
+
+## Core Stack Components
+
+<CardGroup cols={2}>
+  <Card title="Orchestrators" icon="diagram-project" href="/components/orchestrators">
+    Execute and manage pipeline runs across different environments
+  </Card>
+  
+  <Card title="Artifact Stores" icon="database" href="/components/artifact-stores">
+    Store and manage pipeline artifacts, inputs, and outputs
+  </Card>
+  
+  <Card title="Container Registries" icon="box" href="/components/container-registries">
+    Store and manage Docker container images for containerized execution
+  </Card>
+  
+  <Card title="Model Deployers" icon="rocket" href="/components/model-deployers">
+    Deploy models for online inference and serving
+  </Card>
+  
+  <Card title="Experiment Trackers" icon="chart-line" href="/components/experiment-trackers">
+    Track experiments, metrics, and parameters across pipeline runs
+  </Card>
+  
+  <Card title="Step Operators" icon="microchip" href="/components/step-operators">
+    Run individual steps on specialized infrastructure like GPUs
+  </Card>
+</CardGroup>
+
+## Viewing Your Stack
+
+To see your current stack configuration:
+
+```bash
+zenml stack describe
+```
+
+To list all available stacks:
+
+```bash
+zenml stack list
+```
+
+## Default Stack
+
+When you initialize ZenML, a default stack is created with:
+- **Local Orchestrator**: Runs pipelines locally on your machine
+- **Local Artifact Store**: Stores artifacts in a local directory
+
+This stack is perfect for getting started and local development, but you'll want to configure remote components for production use.
+
+## Creating Custom Stacks
+
+You can create custom stacks by registering individual components and combining them:
+
+```bash
+# Register components
+zenml orchestrator register my_orchestrator --flavor=local
+zenml artifact-store register my_artifact_store --flavor=local --path=/path/to/artifacts
+
+# Create a stack from components
+zenml stack register my_stack \
+  -o my_orchestrator \
+  -a my_artifact_store
+
+# Set as active stack
+zenml stack set my_stack
+```
+
+## Stack Validation
+
+ZenML validates that all components in a stack are compatible with each other. Some components have specific requirements:
+
+- Container-based orchestrators require a container registry
+- Remote orchestrators typically require remote artifact stores
+- Certain integrations have specific version requirements
+
+When you register or set a stack, ZenML automatically validates compatibility.
+
+## Component Flavors
+
+Each component type can have multiple "flavors" - different implementations of the same component interface. For example:
+
+- **Orchestrator flavors**: `local`, `kubernetes`, `airflow`, `kubeflow`, `vertex`, `sagemaker`
+- **Artifact Store flavors**: `local`, `s3`, `gcs`, `azure`
+- **Container Registry flavors**: `default`, `dockerhub`, `gcp`, `azure`, `github`
+
+To see available flavors for a component:
+
+```bash
+zenml orchestrator flavor list
+zenml artifact-store flavor list
+```
+
+## Integration Components
+
+Many components require ZenML integrations to be installed. For example, to use AWS components:
+
+```bash
+zenml integration install aws
+```
+
+Common integrations include:
+- `aws` - S3, SageMaker, and other AWS services
+- `gcp` - GCS, Vertex AI, and other GCP services
+- `azure` - Azure Blob Storage and Azure ML
+- `kubernetes` - Kubernetes orchestration
+- `mlflow` - MLflow experiment tracking
+- `wandb` - Weights & Biases experiment tracking
+
+## Next Steps
+
+Explore the individual component pages to learn how to configure and use each component type in your ML pipelines.

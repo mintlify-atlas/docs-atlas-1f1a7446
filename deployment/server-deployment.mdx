@@ -1,0 +1,578 @@
+---
+title: Server Deployment Options
+description: Deploy ZenML server using different methods for various use cases
+---
+
+# ZenML Server Deployment Options
+
+ZenML server can be deployed in multiple ways depending on your infrastructure requirements, scale, and operational preferences. This guide covers all deployment options from local development to production-grade setups.
+
+## Deployment Methods
+
+<CardGroup cols={2}>
+  <Card title="Local Server" icon="laptop">
+    Quick setup for development and testing
+  </Card>
+  
+  <Card title="Docker" icon="docker">
+    Containerized deployment for consistency
+  </Card>
+  
+  <Card title="Kubernetes" icon="dharmachakra">
+    Production-grade orchestrated deployment
+  </Card>
+  
+  <Card title="Cloud Services" icon="cloud">
+    Managed deployment on cloud platforms
+  </Card>
+</CardGroup>
+
+## Local Server Deployment
+
+The simplest way to deploy ZenML server for development and testing.
+
+### Quick Start
+
+Deploy a local server with a single command:
+
+```bash
+zenml up
+```
+
+This command:
+- Starts a local ZenML server on `http://127.0.0.1:8237`
+- Uses SQLite database for storage
+- Enables local artifact storage
+- Opens the dashboard in your browser
+
+### Custom Configuration
+
+Configure the local server with specific options:
+
+```bash
+# Deploy on custom port
+zenml up --port 8080
+
+# Disable automatic browser opening
+zenml up --no-dashboard
+
+# Deploy with specific IP address
+zenml up --ip-address 0.0.0.0
+
+# Block until server is stopped
+zenml up --blocking
+```
+
+### Connecting to Local Server
+
+Connect your ZenML client to the local server:
+
+```bash
+zenml connect --url http://127.0.0.1:8237
+```
+
+Or use environment variables:
+
+```bash
+export ZENML_STORE_URL=http://127.0.0.1:8237
+export ZENML_STORE_TYPE=rest
+```
+
+### Stopping Local Server
+
+Stop the running local server:
+
+```bash
+zenml down
+```
+
+## Docker Deployment
+
+Deploy ZenML server as a Docker container for isolated and reproducible environments.
+
+### Using Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  zenml:
+    image: zenmldocker/zenml-server:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - ZENML_SERVER_AUTH_SCHEME=NO_AUTH
+      - ZENML_ANALYTICS_OPT_IN=false
+      - ZENML_DEBUG=false
+    volumes:
+      - zenml-config:/zenml/.zenconfig
+      - zenml-data:/zenml/.zenconfig/local_stores
+
+volumes:
+  zenml-config:
+  zenml-data:
+```
+
+Deploy the server:
+
+```bash
+docker-compose up -d
+```
+
+### Using Docker Run
+
+Run the container directly:
+
+```bash
+docker run -d \
+  --name zenml-server \
+  -p 8080:8080 \
+  -e ZENML_SERVER_AUTH_SCHEME=OAUTH2_PASSWORD_BEARER \
+  -e ZENML_AUTH_JWT_SECRET_KEY=$(openssl rand -hex 32) \
+  -v zenml-config:/zenml/.zenconfig \
+  -v zenml-data:/zenml/.zenconfig/local_stores \
+  zenmldocker/zenml-server:latest
+```
+
+### Docker Deployment with MySQL
+
+For production-like Docker deployments, use an external MySQL database:
+
+```yaml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=zenml
+      - MYSQL_USER=zenml
+      - MYSQL_PASSWORD=zenmlpassword
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  zenml:
+    image: zenmldocker/zenml-server:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - ZENML_STORE_URL=mysql://zenml:zenmlpassword@mysql:3306/zenml
+      - ZENML_SERVER_AUTH_SCHEME=OAUTH2_PASSWORD_BEARER
+      - ZENML_AUTH_JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ZENML_DEFAULT_PROJECT_NAME=default
+      - ZENML_ANALYTICS_OPT_IN=true
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+```
+
+Generate JWT secret and start:
+
+```bash
+export JWT_SECRET_KEY=$(openssl rand -hex 32)
+docker-compose up -d
+```
+
+### Using ZenML CLI for Docker Deployment
+
+ZenML provides a CLI command to deploy a Docker-based server:
+
+```bash
+zenml deploy --provider docker
+```
+
+This creates a Docker container with:
+- SQLite database
+- Local artifact storage
+- Exposed on localhost:8238
+
+### Accessing Docker Server Logs
+
+View server logs:
+
+```bash
+# Using docker-compose
+docker-compose logs -f zenml
+
+# Using docker
+docker logs -f zenml-server
+```
+
+## Programmatic Deployment
+
+Deploy ZenML server programmatically using Python:
+
+```python
+from zenml.zen_server.deploy.docker import DockerServerDeploymentConfig
+from zenml.services import ServiceRegistry
+
+# Configure deployment
+config = DockerServerDeploymentConfig(
+    name="zenml-server",
+    port=8080,
+    image="zenmldocker/zenml-server:latest",
+)
+
+# Deploy the server
+from zenml.zen_server.deploy.docker import DockerZenServer
+server = DockerZenServer(config=config)
+server.start()
+
+print(f"Server running at: {server.endpoint.config.url}")
+
+# Stop the server when done
+server.stop()
+```
+
+## Cloud Provider Deployments
+
+### AWS Deployment Options
+
+<CardGroup cols={2}>
+  <Card title="AWS ECS" icon="aws">
+    Deploy on Elastic Container Service
+  </Card>
+  
+  <Card title="AWS EKS" icon="aws">
+    Deploy on Elastic Kubernetes Service
+  </Card>
+  
+  <Card title="AWS App Runner" icon="aws">
+    Fully managed container deployment
+  </Card>
+  
+  <Card title="AWS Fargate" icon="aws">
+    Serverless container deployment
+  </Card>
+</CardGroup>
+
+### GCP Deployment Options
+
+<CardGroup cols={2}>
+  <Card title="Cloud Run" icon="google">
+    Fully managed serverless platform
+  </Card>
+  
+  <Card title="GKE" icon="google">
+    Google Kubernetes Engine
+  </Card>
+  
+  <Card title="Compute Engine" icon="google">
+    Virtual machine deployment
+  </Card>
+  
+  <Card title="Cloud SQL" icon="google">
+    Managed MySQL database
+  </Card>
+</CardGroup>
+
+### Azure Deployment Options
+
+<CardGroup cols={2}>
+  <Card title="Container Apps" icon="microsoft">
+    Fully managed container platform
+  </Card>
+  
+  <Card title="AKS" icon="microsoft">
+    Azure Kubernetes Service
+  </Card>
+  
+  <Card title="Container Instances" icon="microsoft">
+    Lightweight container deployment
+  </Card>
+  
+  <Card title="Azure Database" icon="microsoft">
+    Managed MySQL database
+  </Card>
+</CardGroup>
+
+## Production Configuration
+
+### Essential Environment Variables
+
+Production deployments require proper configuration:
+
+```bash
+# Authentication
+ZENML_SERVER_AUTH_SCHEME=OAUTH2_PASSWORD_BEARER
+ZENML_AUTH_JWT_SECRET_KEY=<generate-with-openssl-rand>
+ZENML_AUTH_JWT_TOKEN_EXPIRE_MINUTES=60
+
+# Database
+ZENML_STORE_URL=mysql://user:pass@host:3306/zenml
+ZENML_STORE_POOL_SIZE=20
+ZENML_STORE_MAX_OVERFLOW=20
+ZENML_STORE_SSL_CA=/path/to/ca.crt
+
+# Server
+ZENML_SERVER_URL=https://zenml.example.com
+ZENML_SERVER_DEPLOYMENT_TYPE=production
+ZENML_DEFAULT_PROJECT_NAME=default
+
+# Secrets Store
+ZENML_SECRETS_STORE_TYPE=aws  # or gcp, azure, hashicorp
+ZENML_SECRETS_STORE_ENCRYPTION_KEY=<your-encryption-key>
+
+# Performance
+ZENML_SERVER_THREAD_POOL_SIZE=40
+ZENML_SERVER_AUTH_THREAD_POOL_SIZE=5
+ZENML_SERVER_REQUEST_TIMEOUT=20
+
+# Observability
+ZENML_ANALYTICS_OPT_IN=true
+ZENML_LOGGING_VERBOSITY=INFO
+```
+
+### Database Backup Strategy
+
+Configure automatic database backups:
+
+```bash
+# Backup strategy options:
+# - disabled: No backups
+# - in-memory: Fast but not persisted
+# - dump-file: Persisted to disk/volume
+# - database: Copy to backup database
+# - mydumper: Using mydumper/myloader tools
+
+ZENML_STORE_BACKUP_STRATEGY=dump-file
+ZENML_STORE_BACKUP_DIRECTORY=/backups
+```
+
+### SSL/TLS Configuration
+
+Secure database connections with SSL:
+
+```bash
+# Enable SSL
+ZENML_STORE_SSL=true
+
+# SSL certificate paths
+ZENML_STORE_SSL_CA=/certs/ca.crt
+ZENML_STORE_SSL_CERT=/certs/client-cert.pem
+ZENML_STORE_SSL_KEY=/certs/client-key.pem
+
+# Verify server certificate
+ZENML_STORE_SSL_VERIFY_SERVER_CERT=true
+```
+
+## Resource Requirements
+
+### Minimum Requirements (Development)
+
+- **CPU**: 1 core
+- **Memory**: 2 GB RAM
+- **Storage**: 10 GB
+- **Network**: 1 Mbps
+
+### Recommended Requirements (Production)
+
+- **CPU**: 4+ cores
+- **Memory**: 8+ GB RAM
+- **Storage**: 100+ GB
+- **Network**: 100+ Mbps
+- **Database**: External MySQL with replication
+
+### Scaling Guidelines
+
+| Users | Pipelines/Day | CPU | Memory | Replicas |
+|-------|---------------|-----|--------|----------|
+| 1-5 | < 50 | 2 | 4 GB | 1 |
+| 5-20 | 50-200 | 4 | 8 GB | 2 |
+| 20-50 | 200-500 | 8 | 16 GB | 3-5 |
+| 50+ | 500+ | 16+ | 32+ GB | 5-10 |
+
+## Health Checks
+
+Implement health checks for monitoring:
+
+### Liveness Probe
+
+```bash
+curl http://localhost:8080/health
+```
+
+Response:
+```json
+{
+  "status": "ok"
+}
+```
+
+### Readiness Probe
+
+```bash
+curl http://localhost:8080/ready
+```
+
+### Version Check
+
+```bash
+curl http://localhost:8080/version
+```
+
+Response:
+```json
+{
+  "version": "0.94.0",
+  "deployment": "docker"
+}
+```
+
+## Troubleshooting
+
+### Server Won't Start
+
+Check logs for errors:
+
+```bash
+# Local deployment
+zenml logs
+
+# Docker deployment
+docker logs zenml-server
+
+# Kubernetes deployment
+kubectl logs -l app=zenml-server
+```
+
+### Database Connection Issues
+
+Verify database connectivity:
+
+```bash
+# Test MySQL connection
+mysql -h host -u user -p -e "SELECT 1;"
+
+# Check ZenML database
+mysql -h host -u user -p zenml -e "SHOW TABLES;"
+```
+
+### Authentication Failures
+
+Reset admin credentials:
+
+```bash
+# For local deployments
+zenml user create admin --password newpassword
+
+# For containerized deployments
+docker exec -it zenml-server zenml user create admin --password newpassword
+```
+
+### Port Conflicts
+
+Check if port is already in use:
+
+```bash
+# Linux/Mac
+lsof -i :8080
+
+# Windows
+netstat -ano | findstr :8080
+```
+
+Change the port:
+
+```bash
+zenml up --port 8081
+```
+
+## Migration Guide
+
+### Migrating from Local to Docker
+
+1. Export local configuration:
+
+```bash
+zenml export config --path /tmp/zenml-config
+```
+
+2. Deploy Docker server:
+
+```bash
+docker-compose up -d
+```
+
+3. Import configuration:
+
+```bash
+docker cp /tmp/zenml-config zenml-server:/tmp/
+docker exec zenml-server zenml import config --path /tmp/zenml-config
+```
+
+### Migrating from Docker to Kubernetes
+
+1. Backup database:
+
+```bash
+docker exec mysql mysqldump -u root -p zenml > zenml-backup.sql
+```
+
+2. Deploy Kubernetes cluster (see [Kubernetes deployment guide](/deployment/kubernetes))
+
+3. Restore database:
+
+```bash
+kubectl exec -i mysql-pod -- mysql -u root -p zenml < zenml-backup.sql
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use External Database" icon="database">
+    Always use MySQL for production deployments, never SQLite
+  </Card>
+  
+  <Card title="Enable Authentication" icon="lock">
+    Never deploy without authentication in production environments
+  </Card>
+  
+  <Card title="Configure SSL/TLS" icon="shield">
+    Use HTTPS and SSL for all network connections
+  </Card>
+  
+  <Card title="Regular Backups" icon="cloud-arrow-down">
+    Implement automated database backup strategies
+  </Card>
+  
+  <Card title="Monitor Resources" icon="chart-line">
+    Set up monitoring for CPU, memory, and disk usage
+  </Card>
+  
+  <Card title="Scale Horizontally" icon="arrows-left-right">
+    Use multiple replicas for high availability
+  </Card>
+  
+  <Card title="Rotate Secrets" icon="key">
+    Regularly rotate JWT keys and database credentials
+  </Card>
+  
+  <Card title="Update Regularly" icon="arrows-rotate">
+    Keep ZenML server updated to latest stable version
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Kubernetes Deployment" href="/deployment/kubernetes" icon="dharmachakra">
+    Deploy on Kubernetes with Helm
+  </Card>
+  
+  <Card title="Docker Guide" href="/deployment/docker" icon="docker">
+    Detailed Docker deployment instructions
+  </Card>
+  
+  <Card title="Security Configuration" href="/how-to/configure-zenml-server" icon="shield">
+    Secure your ZenML deployment
+  </Card>
+</CardGroup>

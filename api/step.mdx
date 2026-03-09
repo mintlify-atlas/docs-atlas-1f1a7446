@@ -1,0 +1,221 @@
+---
+title: "@step"
+description: "Decorator to create a ZenML step"
+icon: "code"
+---
+
+The `@step` decorator transforms a Python function into a ZenML step that can be used in pipelines.
+
+## Signature
+
+```python
+@step(
+    name: Optional[str] = None,
+    enable_cache: Optional[bool] = None,
+    enable_artifact_metadata: Optional[bool] = None,
+    enable_artifact_visualization: Optional[bool] = None,
+    enable_step_logs: Optional[bool] = None,
+    experiment_tracker: Optional[Union[bool, str]] = None,
+    step_operator: Optional[Union[bool, str]] = None,
+    output_materializers: Optional[OutputMaterializersSpecification] = None,
+    environment: Optional[Dict[str, Any]] = None,
+    secrets: Optional[List[Union[UUID, str]]] = None,
+    settings: Optional[Dict[str, SettingsOrDict]] = None,
+    extra: Optional[Dict[str, Any]] = None,
+    on_failure: Optional[HookSpecification] = None,
+    on_success: Optional[HookSpecification] = None,
+    model: Optional[Model] = None,
+    retry: Optional[StepRetryConfig] = None,
+    substitutions: Optional[Dict[str, str]] = None,
+    cache_policy: Optional[CachePolicyOrString] = None,
+    runtime: Optional[StepRuntime] = None,
+    heartbeat_healthy_threshold: Optional[int] = None,
+    group: Optional[Union[GroupInfo, str]] = None,
+) -> BaseStep
+```
+
+## Parameters
+
+<ParamField path="name" type="str" optional>
+  The name of the step. If not provided, the function name is used.
+</ParamField>
+
+<ParamField path="enable_cache" type="bool" optional>
+  Whether caching is enabled for this step. Defaults to True.
+</ParamField>
+
+<ParamField path="enable_artifact_metadata" type="bool" optional>
+  Whether to extract and store metadata for artifacts. Defaults to True.
+</ParamField>
+
+<ParamField path="enable_artifact_visualization" type="bool" optional>
+  Whether to generate visualizations for artifacts. Defaults to True.
+</ParamField>
+
+<ParamField path="enable_step_logs" type="bool" optional>
+  Whether step logs should be enabled.
+</ParamField>
+
+<ParamField path="experiment_tracker" type="Union[bool, str]" optional>
+  The experiment tracker to use for this step.
+</ParamField>
+
+<ParamField path="step_operator" type="Union[bool, str]" optional>
+  The step operator to use for running this step.
+</ParamField>
+
+<ParamField path="output_materializers" type="OutputMaterializersSpecification" optional>
+  Custom materializers for step outputs. Can be a single materializer class, a list, or a dict mapping output names to materializers.
+</ParamField>
+
+<ParamField path="environment" type="Dict[str, Any]" optional>
+  Environment variables to set when running this step.
+</ParamField>
+
+<ParamField path="secrets" type="List[Union[UUID, str]]" optional>
+  Secrets to set as environment variables.
+</ParamField>
+
+<ParamField path="settings" type="Dict[str, SettingsOrDict]" optional>
+  Stack component settings for this step.
+</ParamField>
+
+<ParamField path="extra" type="Dict[str, Any]" optional>
+  Extra configurations for this step.
+</ParamField>
+
+<ParamField path="on_failure" type="HookSpecification" optional>
+  Callback function to execute on step failure.
+</ParamField>
+
+<ParamField path="on_success" type="HookSpecification" optional>
+  Callback function to execute on step success.
+</ParamField>
+
+<ParamField path="model" type="Model" optional>
+  Model configuration for the Model Control Plane.
+</ParamField>
+
+<ParamField path="retry" type="StepRetryConfig" optional>
+  Retry configuration in case of step failure.
+</ParamField>
+
+<ParamField path="substitutions" type="Dict[str, str]" optional>
+  Extra substitutions for model and artifact name placeholders.
+</ParamField>
+
+<ParamField path="cache_policy" type="CachePolicyOrString" optional>
+  Cache policy for this step.
+</ParamField>
+
+<ParamField path="runtime" type="StepRuntime" optional>
+  The step runtime. If not configured, the step runs inline unless a step operator or docker/resource settings are configured.
+</ParamField>
+
+<ParamField path="heartbeat_healthy_threshold" type="int" optional>
+  Time in minutes that a running step can go without heartbeat before being considered unhealthy. Defaults to 30 minutes.
+</ParamField>
+
+<ParamField path="group" type="Union[GroupInfo, str]" optional>
+  Group information for this step.
+</ParamField>
+
+## Returns
+
+<ResponseField name="step" type="BaseStep">
+  A configured step instance that can be used in pipelines.
+</ResponseField>
+
+## Examples
+
+### Basic Step
+
+```python
+from zenml import step
+import pandas as pd
+
+@step
+def load_data() -> pd.DataFrame:
+    """Load data from a source."""
+    return pd.read_csv("data.csv")
+
+@step
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean the input data."""
+    return df.dropna()
+```
+
+### Step with Type Annotations
+
+```python
+from typing import Annotated
+from zenml import step, ArtifactConfig
+import pandas as pd
+
+@step
+def process_data(
+    df: pd.DataFrame
+) -> Annotated[
+    pd.DataFrame,
+    ArtifactConfig(name="processed_data", tags=["clean"])
+]:
+    """Process and clean data."""
+    return df.dropna().reset_index(drop=True)
+```
+
+### Step with Configuration
+
+```python
+from zenml import step, Model
+
+@step(
+    name="model_trainer",
+    enable_cache=False,
+    experiment_tracker="mlflow",
+    model=Model(name="my_model", version="1.0.0")
+)
+def train_model(X_train: pd.DataFrame, y_train: pd.Series) -> Any:
+    """Train a machine learning model."""
+    from sklearn.ensemble import RandomForestClassifier
+    model = RandomForestClassifier()
+    model.fit(X_train, y_train)
+    return model
+```
+
+### Step with Resource Settings
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=4,
+            memory="8GB",
+            gpu_count=1
+        )
+    }
+)
+def train_deep_model(data: pd.DataFrame) -> Any:
+    """Train a model with GPU acceleration."""
+    # Training code here
+    pass
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@pipeline" href="./pipeline" icon="code">
+    Learn about creating pipelines
+  </Card>
+  <Card title="get_step_context" href="./get-step-context" icon="brackets-curly">
+    Access step context
+  </Card>
+  <Card title="ArtifactConfig" href="./artifact-config" icon="box">
+    Configure step outputs
+  </Card>
+  <Card title="ResourceSettings" href="./resource-settings" icon="server">
+    Configure step resources
+  </Card>
+</CardGroup>

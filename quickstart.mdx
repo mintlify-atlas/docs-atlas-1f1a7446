@@ -1,80 +1,632 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Build and run your first ZenML pipeline in 5 minutes - Learn core concepts through a hands-on example"
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This quickstart guides you through creating, running, and understanding your first ZenML pipeline. You'll learn:
 
-### Step 1: Set up your local environment
+- How to define steps and pipelines
+- How ZenML tracks artifacts and metadata
+- How to run pipelines locally and view results
+- How to parameterize pipelines for different scenarios
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+By the end, you'll have a working pipeline and understand ZenML's core building blocks.
 
-### Step 2: Deploy your changes
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+Before starting, make sure you have:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+<Steps>
+  <Step title="Python 3.10+">
+    ZenML requires Python 3.10 or higher. Check your version:
+    ```bash
+    python --version
+    # Should output: Python 3.10.x or higher
+    ```
+  </Step>
+  
+  <Step title="ZenML Installed">
+    Install ZenML with server capabilities:
+    ```bash
+    pip install "zenml[server]"
+    ```
+  </Step>
+  
+  <Step title="ZenML Initialized">
+    Initialize ZenML in your working directory:
+    ```bash
+    zenml init
+    ```
+    This creates a `.zen` directory to store configuration.
+  </Step>
+  
+  <Step title="Server Running (Optional)">
+    For the web dashboard, start a local server:
+    ```bash
+    zenml login --local
+    ```
+    Access the dashboard at [http://localhost:8237](http://localhost:8237)
+  </Step>
+</Steps>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+You can run pipelines without starting the server, but you won't have access to the web dashboard for visualization.
 </Note>
+
+## Your First Pipeline
+
+### Step 1: Create a Step
+
+Steps are the building blocks of ZenML pipelines. Create a file called `quickstart.py`:
+
+```python quickstart.py
+from typing import Optional
+from zenml import step
+
+@step
+def simple_step(name: Optional[str] = None) -> str:
+    """A simple step that returns a personalized greeting.
+    
+    This is the simplest possible ZenML step. It:
+    1. Takes an optional input parameter
+    2. Returns a string
+    3. Is automatically tracked as an artifact by ZenML
+    
+    Args:
+        name: Optional name to personalize the greeting
+        
+    Returns:
+        A personalized greeting message
+    """
+    if name:
+        message = f"Hello {name}! Welcome to ZenML 🚀"
+    else:
+        message = "Hello from ZenML! 🚀"
+    print(message)
+    return message
+```
+
+<Note>
+The `@step` decorator tells ZenML to track this function's execution, inputs, outputs, and metadata automatically.
+</Note>
+
+### Step 2: Create a Pipeline
+
+Pipelines compose multiple steps into a workflow. Add this to `quickstart.py`:
+
+```python quickstart.py
+from typing import Annotated, Optional
+from zenml import pipeline, step
+
+@step
+def simple_step(name: Optional[str] = None) -> str:
+    """A simple step that returns a personalized greeting."""
+    if name:
+        message = f"Hello {name}! Welcome to ZenML 🚀"
+    else:
+        message = "Hello from ZenML! 🚀"
+    print(message)
+    return message
+
+@pipeline(enable_cache=False)
+def simple_pipeline(name: Optional[str] = None) -> Annotated[str, "greeting"]:
+    """A simple pipeline that demonstrates ZenML basics.
+    
+    This pipeline:
+    1. Takes an optional name parameter
+    2. Calls a single step that returns a personalized greeting
+    3. Returns the result as a tracked artifact
+    
+    Args:
+        name: Optional name to personalize the greeting
+        
+    Returns:
+        A greeting message as an artifact
+    """
+    greeting = simple_step(name=name)
+    return greeting
+
+if __name__ == "__main__":
+    # Run the pipeline
+    result = simple_pipeline()
+    print(f"Pipeline returned: {result}")
+```
+
+The `Annotated[str, "greeting"]` syntax gives the output artifact a meaningful name in the ZenML dashboard.
+
+### Step 3: Run the Pipeline
+
+```bash
+python quickstart.py
+```
+
+You'll see output similar to:
+
+```
+🚀 Running ZenML quickstart pipeline...
+Hello from ZenML! 🚀
+Pipeline simple_pipeline completed successfully!
+┏━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Pipeline Run       │ simple_pipeline-2024_03_09-10_30  ┃
+┠────────────────────┼───────────────────────────────────┨
+┃ Status             │ completed                         ┃
+┃ Steps              │ 1                                 ┃
+┃ Artifacts          │ 1                                 ┃
+┃ Duration           │ 2.3s                              ┃
+┗━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+<Note>
+ZenML automatically versioned your code, tracked the execution time, and stored the output artifact. All of this is queryable through the Python API or dashboard.
+</Note>
+
+### Step 4: Run with Parameters
+
+Pipelines can accept parameters to customize behavior:
+
+```python
+# Run with a custom name
+result = simple_pipeline(name="Alice")
+print(f"Pipeline returned: {result}")
+```
+
+Output:
+```
+Hello Alice! Welcome to ZenML 🚀
+Pipeline returned: Hello Alice! Welcome to ZenML 🚀
+```
+
+## Understanding What Happened
+
+When you ran the pipeline, ZenML:
+
+<Steps>
+  <Step title="Tracked Execution">
+    Created a pipeline run record with a unique ID, timestamp, and status.
+  </Step>
+  
+  <Step title="Stored Artifacts">
+    Saved the output string as a versioned artifact in the artifact store (local filesystem by default).
+  </Step>
+  
+  <Step title="Captured Metadata">
+    Logged parameters, execution time, system information, and step-level details.
+  </Step>
+  
+  <Step title="Created Lineage">
+    Built a graph showing the relationship between inputs, steps, and outputs.
+  </Step>
+</Steps>
+
+## Viewing Results
+
+### Command Line
+
+Inspect pipeline runs using the CLI:
+
+```bash
+# List recent pipeline runs
+zenml pipeline runs list
+
+# Show details of the latest run
+zenml pipeline runs describe
+
+# List artifacts from the latest run
+zenml pipeline runs artifact list
+```
+
+### Dashboard
+
+If you started the server with `zenml login --local`, open [http://localhost:8237](http://localhost:8237) to:
+
+- View all pipeline runs in a timeline
+- Explore the DAG (directed acyclic graph) of your pipeline
+- Inspect artifact contents and metadata
+- Compare runs across different parameters
+- Debug failed steps with logs and stack traces
+
+## Building a More Complete Pipeline
+
+Let's expand the example to demonstrate multiple steps and artifact passing:
+
+```python complete_pipeline.py
+from typing import Annotated, Dict, List
+from zenml import pipeline, step
+import random
+
+@step
+def generate_numbers(count: int = 10) -> Annotated[List[int], "random_numbers"]:
+    """Generate a list of random numbers.
+    
+    Args:
+        count: Number of random integers to generate
+        
+    Returns:
+        List of random integers
+    """
+    numbers = [random.randint(1, 100) for _ in range(count)]
+    print(f"Generated {count} numbers: {numbers}")
+    return numbers
+
+@step
+def calculate_statistics(
+    numbers: List[int]
+) -> Annotated[Dict[str, float], "statistics"]:
+    """Calculate statistics from a list of numbers.
+    
+    Args:
+        numbers: List of integers to analyze
+        
+    Returns:
+        Dictionary containing mean, median, min, and max
+    """
+    sorted_numbers = sorted(numbers)
+    n = len(numbers)
+    
+    stats = {
+        "mean": sum(numbers) / n,
+        "median": sorted_numbers[n // 2],
+        "min": min(numbers),
+        "max": max(numbers),
+        "count": n
+    }
+    
+    print(f"Statistics: {stats}")
+    return stats
+
+@step
+def format_report(
+    statistics: Dict[str, float]
+) -> Annotated[str, "report"]:
+    """Create a formatted report from statistics.
+    
+    Args:
+        statistics: Dictionary of calculated statistics
+        
+    Returns:
+        Formatted report string
+    """
+    report = f"""
+    📊 Statistics Report
+    {'='*40}
+    Count:  {statistics['count']}
+    Mean:   {statistics['mean']:.2f}
+    Median: {statistics['median']:.2f}
+    Min:    {statistics['min']:.2f}
+    Max:    {statistics['max']:.2f}
+    """
+    print(report)
+    return report
+
+@pipeline(enable_cache=True)
+def statistics_pipeline(
+    count: int = 10
+) -> Annotated[str, "final_report"]:
+    """Pipeline that generates numbers and computes statistics.
+    
+    This demonstrates:
+    - Multiple steps with dependencies
+    - Artifact passing between steps
+    - Named artifacts with type annotations
+    - Pipeline-level caching
+    
+    Args:
+        count: Number of random integers to generate
+        
+    Returns:
+        Formatted statistics report
+    """
+    numbers = generate_numbers(count=count)
+    stats = calculate_statistics(numbers=numbers)
+    report = format_report(statistics=stats)
+    return report
+
+if __name__ == "__main__":
+    # Run with default parameters
+    print("🚀 Running statistics pipeline...\n")
+    result = statistics_pipeline()
+    
+    # Run again with different parameters
+    print("\n🔄 Running again with 20 numbers...\n")
+    result = statistics_pipeline(count=20)
+```
+
+Run it:
+
+```bash
+python complete_pipeline.py
+```
+
+### Key Concepts Demonstrated
+
+<CardGroup cols={2}>
+  <Card title="Artifact Passing" icon="arrow-right-arrow-left">
+    The `numbers` artifact from `generate_numbers` is automatically passed to `calculate_statistics`. ZenML handles serialization and deserialization.
+  </Card>
+  
+  <Card title="Type Annotations" icon="code">
+    `Annotated[List[int], "random_numbers"]` specifies the output type AND gives it a name in the artifact store.
+  </Card>
+  
+  <Card title="Caching" icon="database">
+    With `enable_cache=True`, ZenML reuses results when inputs haven't changed. Run the same pipeline twice - the second run is instant!
+  </Card>
+  
+  <Card title="Dependencies" icon="network-wired">
+    ZenML automatically determines execution order based on which steps consume which artifacts.
+  </Card>
+</CardGroup>
+
+## Caching in Action
+
+Run the complete pipeline twice with the same parameters:
+
+```python
+# First run - executes all steps
+result1 = statistics_pipeline(count=10)
+
+# Second run - uses cached results (much faster!)
+result2 = statistics_pipeline(count=10)
+
+# Different parameters - cache miss, runs again
+result3 = statistics_pipeline(count=20)
+```
+
+ZenML compares:
+- Input values (count=10 vs count=20)
+- Step code (did you change the function?)
+- Dependencies (did upstream artifacts change?)
+
+If everything matches, cached artifacts are reused.
+
+<Warning>
+Caching is powerful for expensive operations (training models, processing large datasets), but disable it during development with `enable_cache=False` to see changes immediately.
+</Warning>
+
+## Loading Artifacts
+
+Access artifacts from previous runs programmatically:
+
+```python
+from zenml.client import Client
+
+# Get the ZenML client
+client = Client()
+
+# Get the latest run of a pipeline
+run = client.get_pipeline("statistics_pipeline").last_successful_run
+
+# Load specific artifacts
+numbers = run.steps["generate_numbers"].output.load()
+stats = run.steps["calculate_statistics"].output.load()
+report = run.steps["format_report"].output.load()
+
+print(f"Numbers from previous run: {numbers}")
+print(f"Stats from previous run: {stats}")
+```
+
+This is useful for:
+- Comparing model performance across runs
+- Debugging by inspecting intermediate artifacts
+- Building evaluation pipelines that analyze previous outputs
+
+## Adding Context to Steps
+
+Steps can access runtime information:
+
+```python
+from zenml import step, get_step_context
+
+@step
+def context_aware_step() -> str:
+    """Demonstrate accessing step context."""
+    context = get_step_context()
+    
+    print(f"Pipeline name: {context.pipeline_name}")
+    print(f"Step name: {context.step_name}")
+    print(f"Run name: {context.pipeline_run.name}")
+    
+    return f"Executed in {context.pipeline_name}"
+```
+
+Context provides:
+- Pipeline and step names
+- Run ID and metadata
+- Stack configuration
+- Input/output artifact info
+
+## Configuration and Settings
+
+### Pipeline Configuration
+
+```python
+from zenml import pipeline
+from zenml.config import DeploymentSettings, CORSConfig
+
+# Configure pipeline for deployment
+deployment_settings = DeploymentSettings(
+    app_title="Statistics Pipeline",
+    cors=CORSConfig(allow_origins=["*"]),
+)
+
+@pipeline(
+    enable_cache=True,
+    settings={
+        "deployment": deployment_settings,
+    },
+)
+def my_pipeline():
+    # Pipeline implementation
+    pass
+```
+
+### Step Configuration
+
+```python
+from zenml import step
+from zenml.config import ResourceSettings
+
+@step(
+    settings={
+        "resources": ResourceSettings(
+            cpu_count=4,
+            memory="8GB",
+        )
+    }
+)
+def resource_intensive_step() -> str:
+    # This step requests specific resources
+    return "Computed with 4 CPUs and 8GB RAM"
+```
+
+## Next Steps
+
+You now understand ZenML's core concepts! Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card title="Starter Guide" icon="book" href="https://docs.zenml.io/user-guide/starter-guide">
+    Deep dive into pipelines, steps, stacks, and artifacts
+  </Card>
+  
+  <Card title="Example Projects" icon="code" href="https://github.com/zenml-io/zenml/tree/main/examples">
+    Explore production-ready examples: ML training, LLM apps, agents
+  </Card>
+  
+  <Card title="Stack Components" icon="cube" href="https://docs.zenml.io/stacks">
+    Learn about orchestrators, artifact stores, and integrations
+  </Card>
+  
+  <Card title="Deploy to Production" icon="rocket" href="https://docs.zenml.io/getting-started/deploying-zenml">
+    Run pipelines on Kubernetes, AWS, GCP, or Azure
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Data Loading Step
+
+```python
+import pandas as pd
+from typing import Annotated
+from zenml import step
+
+@step
+def load_data(
+    data_path: str
+) -> Annotated[pd.DataFrame, "raw_data"]:
+    """Load data from a file."""
+    df = pd.read_csv(data_path)
+    print(f"Loaded {len(df)} rows")
+    return df
+```
+
+### Model Training Step
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+from typing import Annotated, Tuple
+import numpy as np
+
+@step
+def train_model(
+    X_train: np.ndarray,
+    y_train: np.ndarray
+) -> Annotated[RandomForestClassifier, "model"]:
+    """Train a random forest classifier."""
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    return model
+```
+
+### Evaluation Step
+
+```python
+from sklearn.metrics import accuracy_score, f1_score
+from typing import Dict
+import numpy as np
+
+@step
+def evaluate_model(
+    model: RandomForestClassifier,
+    X_test: np.ndarray,
+    y_test: np.ndarray
+) -> Annotated[Dict[str, float], "metrics"]:
+    """Evaluate model performance."""
+    predictions = model.predict(X_test)
+    
+    metrics = {
+        "accuracy": accuracy_score(y_test, predictions),
+        "f1_score": f1_score(y_test, predictions, average="weighted")
+    }
+    
+    print(f"Model metrics: {metrics}")
+    return metrics
+```
+
+## Troubleshooting
+
+<Accordion title="Pipeline runs but artifacts aren't visible">
+Make sure you started the ZenML server:
+
+```bash
+zenml login --local
+```
+
+Or check status:
+
+```bash
+zenml status
+```
+</Accordion>
+
+<Accordion title="Caching not working as expected">
+Caching requires:
+1. `enable_cache=True` in the pipeline decorator
+2. Identical inputs (parameters and upstream artifacts)
+3. Unchanged step code
+
+Disable temporarily to force re-execution:
+
+```python
+@pipeline(enable_cache=False)
+def my_pipeline():
+    pass
+```
+</Accordion>
+
+<Accordion title="Import errors with custom objects">
+ZenML uses `cloudpickle` for serialization. Most Python objects work, but if you get import errors:
+
+1. Ensure all imports are at the top of your file
+2. Use built-in materializers for common types (pandas, numpy, sklearn)
+3. Create custom materializers for complex objects (see docs)
+</Accordion>
+
+<Accordion title="Step parameters not updating">
+If changing step parameters doesn't affect the output, caching might be enabled. Either:
+
+```python
+# Disable caching in the pipeline
+@pipeline(enable_cache=False)
+def my_pipeline():
+    pass
+
+# Or pass different parameters to force cache miss
+my_pipeline(count=11)  # Different from previous run
+```
+</Accordion>
+
+## Additional Resources
+
+- **[ZenML Examples](https://github.com/zenml-io/zenml/tree/main/examples)**: Real-world projects including:
+  - Classical ML pipelines (scikit-learn, XGBoost)
+  - Deep learning workflows (PyTorch, TensorFlow)
+  - LLM applications and RAG pipelines
+  - AI agent orchestration
+- **[SDK Documentation](https://sdkdocs.zenml.io/)**: Complete API reference
+- **[Slack Community](https://zenml.io/slack)**: Get help from 4,000+ ML engineers
+- **[YouTube Tutorials](https://www.youtube.com/c/ZenML)**: Video walkthroughs
+
+Congratulations! You've built your first ZenML pipelines and understand the fundamentals. Ready to build production ML systems? Check out the [Starter Guide](https://docs.zenml.io/user-guide/starter-guide) for advanced topics.

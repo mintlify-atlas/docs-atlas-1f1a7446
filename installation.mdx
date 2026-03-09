@@ -1,0 +1,416 @@
+---
+title: "Installation"
+description: "Install ZenML and set up your development environment for local or production use"
+---
+
+## Quick Installation
+
+ZenML requires Python 3.10 or higher. Install it using pip:
+
+<CodeGroup>
+```bash pip (Recommended)
+pip install "zenml[server]"
+```
+
+```bash uv (Fast Alternative)
+uv pip install "zenml[server]"
+```
+
+```bash Client Only
+# Minimal installation for connecting to remote servers
+pip install zenml
+```
+</CodeGroup>
+
+<Note>
+The `[server]` extra includes components needed to run a local ZenML server. If you only need to connect to a remote server, use `pip install zenml` for a lighter installation.
+</Note>
+
+## System Requirements
+
+### Python Version Support
+
+ZenML supports Python 3.10, 3.11, 3.12, and 3.13:
+
+- **Python 3.10**: Minimum supported version
+- **Python 3.11**: Recommended for best compatibility
+- **Python 3.12**: Fully supported
+- **Python 3.13**: Latest supported version
+
+<Warning>
+Python 3.9 and earlier are not supported. Python 3.14 support will be added in future releases.
+</Warning>
+
+### Platform Support
+
+- **Linux**: Fully supported (Ubuntu, CentOS, Debian, etc.)
+- **macOS**: Fully supported (Intel and Apple Silicon)
+- **Windows**: Supported via WSL2 (native Windows support is experimental)
+
+## Installation Options
+
+### Local Development Setup
+
+For local development with a self-contained server:
+
+```bash
+# Install with local server capabilities
+pip install "zenml[server]"
+
+# Initialize ZenML repository in current directory
+zenml init
+
+# Start local server (includes web dashboard)
+zenml login --local
+```
+
+This installs ZenML with:
+- SQLModel-based local database (SQLite by default)
+- FastAPI server for the dashboard
+- All core dependencies for pipeline execution
+
+<Steps>
+  <Step title="Install ZenML">
+    Run `pip install "zenml[server]"` to install ZenML with server components.
+  </Step>
+  
+  <Step title="Initialize Repository">
+    Navigate to your project directory and run `zenml init` to create a `.zen` directory with configuration.
+  </Step>
+  
+  <Step title="Start Server">
+    Run `zenml login --local` to start a local server. This launches the dashboard at `http://localhost:8237`.
+  </Step>
+  
+  <Step title="Verify Installation">
+    Run `zenml status` to confirm everything is configured correctly.
+  </Step>
+</Steps>
+
+### Production Client Installation
+
+For connecting to a deployed ZenML server:
+
+```bash
+# Install minimal client
+pip install zenml
+
+# Connect to remote server
+zenml login https://your-zenml-server.com --api-key YOUR_API_KEY
+
+# Verify connection
+zenml status
+```
+
+### Optional Integrations
+
+ZenML provides optional extras for specific integrations and use cases:
+
+<Tabs>
+  <Tab title="Cloud Providers">
+    ```bash
+    # AWS integrations (S3, SageMaker, ECS, etc.)
+    pip install "zenml[connectors-aws,s3fs,sagemaker]"
+    
+    # GCP integrations (GCS, Vertex AI, GKE, etc.)
+    pip install "zenml[connectors-gcp,gcsfs,vertex]"
+    
+    # Azure integrations (Blob Storage, AzureML, AKS, etc.)
+    pip install "zenml[connectors-azure,adlfs,azureml]"
+    ```
+  </Tab>
+  
+  <Tab title="Orchestrators">
+    ```bash
+    # Kubernetes orchestrator
+    pip install "zenml[connectors-kubernetes]"
+    
+    # Cloud-specific orchestrators are included in cloud provider extras
+    ```
+  </Tab>
+  
+  <Tab title="Experiment Tracking">
+    ```bash
+    # MLflow integration (experiment tracking & model registry)
+    pip install "zenml[mlflow]"
+    
+    # Weights & Biases integration
+    pip install "zenml[wandb]"
+    ```
+  </Tab>
+  
+  <Tab title="Secrets Management">
+    ```bash
+    # AWS Secrets Manager
+    pip install "zenml[secrets-aws]"
+    
+    # GCP Secret Manager
+    pip install "zenml[secrets-gcp]"
+    
+    # Azure Key Vault
+    pip install "zenml[secrets-azure]"
+    
+    # HashiCorp Vault
+    pip install "zenml[secrets-hashicorp]"
+    ```
+  </Tab>
+  
+  <Tab title="Development Tools">
+    ```bash
+    # Jupyter notebook support
+    pip install "zenml[jupyter]"
+    
+    # Project templates
+    pip install "zenml[templates]"
+    
+    # Terraform infrastructure provisioning
+    pip install "zenml[terraform]"
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+You can combine multiple extras: `pip install "zenml[server,s3fs,mlflow,jupyter]"`
+</Note>
+
+## Verification
+
+After installation, verify everything works:
+
+```bash
+# Check ZenML version
+zenml version
+
+# Output: ZenML version: 0.94.0
+
+# Check installation status
+zenml status
+
+# Example output:
+# ┏━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+# ┃ Property           │ Value                             ┃
+# ┠────────────────────┼───────────────────────────────────┨
+# ┃ ZenML version      │ 0.94.0                            ┃
+# ┃ Store type         │ local                             ┃
+# ┃ Database URL       │ sqlite:///~/.zen/local_store/...  ┃
+# ┗━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+# List available stacks
+zenml stack list
+
+# Create and run a simple test pipeline
+python -c "from zenml import step, pipeline
+@step
+def hello() -> str:
+    return 'Hello ZenML!'
+@pipeline
+def test_pipeline():
+    hello()
+test_pipeline()"
+```
+
+## Installation for Different Use Cases
+
+### Data Scientists (Local Experimentation)
+
+```bash
+# Full local setup with Jupyter support
+pip install "zenml[server,jupyter]"
+zenml init
+zenml login --local
+
+# Optional: Install experiment tracking
+pip install "zenml[mlflow]"
+```
+
+### ML Engineers (Production Pipelines)
+
+```bash
+# Client only - connect to team server
+pip install zenml
+
+# Add cloud integrations as needed
+pip install "zenml[s3fs,connectors-aws]"
+
+# Connect to production server
+zenml login https://zenml.company.com --api-key $ZENML_API_KEY
+```
+
+### Platform Teams (Server Deployment)
+
+See the [Deploying ZenML](https://docs.zenml.io/getting-started/deploying-zenml) documentation for production server deployment options including:
+
+- Docker Compose deployment
+- Kubernetes Helm charts
+- Cloud-managed deployments (AWS, GCP, Azure)
+
+## Development Installation (From Source)
+
+For contributing to ZenML or using the latest development features:
+
+```bash
+# Clone repository
+git clone https://github.com/zenml-io/zenml.git
+cd zenml
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in development mode with all dev dependencies
+pip install -e ".[dev,server]"
+
+# Or use uv for faster installation
+uv pip install -e ".[dev,server]"
+
+# Verify development installation
+zenml version
+```
+
+<Note>
+Development installation includes testing tools, linting, type checking, and documentation generation dependencies. See `pyproject.toml` for the complete list.
+</Note>
+
+## Docker Installation
+
+Run ZenML in a Docker container:
+
+```bash
+# Pull the latest ZenML server image
+docker pull zenmldocker/zenml:latest
+
+# Run server container
+docker run -d -p 8237:8237 \
+  --name zenml-server \
+  zenmldocker/zenml:latest
+
+# Access dashboard at http://localhost:8237
+```
+
+For production Docker deployments, see the [Docker deployment guide](https://docs.zenml.io/getting-started/deploying-zenml/deploy-with-docker).
+
+## Environment Variables
+
+Configure ZenML behavior with environment variables:
+
+```bash
+# Logging and debugging
+export ZENML_DEBUG=true
+export ZENML_LOGGING_VERBOSITY=INFO
+
+# Analytics (opt out if desired)
+export ZENML_ANALYTICS_OPT_IN=false
+
+# Dashboard behavior
+export AUTO_OPEN_DASHBOARD=false
+
+# Database configuration (for local server)
+export ZENML_DEFAULT_PROJECT_NAME="my_project"
+```
+
+For a complete list of environment variables, see the [configuration documentation](https://docs.zenml.io/reference/environment-variables).
+
+## Upgrading ZenML
+
+<Warning>
+Always backup your ZenML database before upgrading, especially in production environments.
+</Warning>
+
+```bash
+# Upgrade to latest version
+pip install --upgrade "zenml[server]"
+
+# Upgrade to specific version
+pip install --upgrade "zenml[server]==0.94.0"
+
+# After upgrade, run database migrations
+zenml migrate
+
+# Verify upgrade
+zenml version
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<Accordion title="ModuleNotFoundError: No module named 'zenml'">
+This usually means ZenML wasn't installed in the active Python environment.
+
+```bash
+# Check which Python you're using
+which python
+python --version
+
+# Reinstall in correct environment
+pip install "zenml[server]"
+```
+</Accordion>
+
+<Accordion title="Port 8237 already in use">
+Another ZenML server or application is using the default port.
+
+```bash
+# Stop existing server
+zenml down
+
+# Or start server on different port
+zenml login --local --port 8238
+```
+</Accordion>
+
+<Accordion title="Database migration errors">
+Database schema is out of sync with ZenML version.
+
+```bash
+# Run migrations
+zenml migrate
+
+# If migrations fail, you may need to backup and reinitialize
+cp -r ~/.zen ~/.zen.backup
+zenml clean
+zenml init
+```
+</Accordion>
+
+<Accordion title="Import errors with integrations">
+Integration extras aren't installed.
+
+```bash
+# Install required integration
+pip install "zenml[mlflow]"  # for MLflow
+pip install "zenml[s3fs]"    # for S3 artifact store
+
+# Check installed integrations
+zenml integration list
+```
+</Accordion>
+
+### Getting Help
+
+If you encounter issues:
+
+1. Check the [troubleshooting guide](https://docs.zenml.io/reference/troubleshooting)
+2. Search [GitHub issues](https://github.com/zenml-io/zenml/issues)
+3. Ask on [Slack](https://zenml.io/slack) - 4,000+ community members
+4. Review [system logs](https://docs.zenml.io/reference/logging)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Tutorial" icon="rocket" href="/getting-started/quickstart">
+    Build your first pipeline in 5 minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="https://docs.zenml.io/user-guide/starter-guide">
+    Learn about pipelines, steps, and stacks
+  </Card>
+  
+  <Card title="Integrations" icon="plug" href="https://docs.zenml.io/stacks">
+    Connect ZenML to your existing tools
+  </Card>
+  
+  <Card title="Deploy to Production" icon="server" href="https://docs.zenml.io/getting-started/deploying-zenml">
+    Set up a production ZenML server
+  </Card>
+</CardGroup>

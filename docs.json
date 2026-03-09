@@ -1,122 +1,211 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "ZenML",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#c02979",
+    "light": "#4d1d85",
+    "dark": "#ecdbea"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/a9377413-1d52-4737-a25b-e27cce0f5098.png",
+  "logo": {
+    "light": "https://media.brand.dev/4ea066d7-8466-4aa9-8c73-4ec30d881e79.svg",
+    "dark": "https://media.brand.dev/eaf72c93-c9fa-4336-a9b2-6af47cc8990d.webp"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/zenml-io/zenml"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/zenml-io/zenml"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/pipelines",
+              "concepts/steps",
+              "concepts/artifacts",
+              "concepts/stacks",
+              "concepts/stack-components",
+              "concepts/models"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/pipelines/creating-pipelines",
+              "guides/pipelines/deploying-pipelines",
+              "guides/pipelines/scheduling-pipelines",
+              "guides/steps/writing-steps",
+              "guides/steps/step-context",
+              "guides/artifacts/artifact-management",
+              "guides/stacks/configuring-stacks",
+              "guides/stacks/stack-switching"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Stack Components",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "components/overview",
+              "components/orchestrators",
+              "components/artifact-stores",
+              "components/container-registries",
+              "components/model-deployers",
+              "components/experiment-trackers",
+              "components/step-operators"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/aws",
+              "integrations/gcp",
+              "integrations/azure",
+              "integrations/kubernetes",
+              "integrations/kubeflow",
+              "integrations/mlflow",
+              "integrations/wandb",
+              "integrations/sagemaker",
+              "integrations/vertex-ai"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-orchestrators",
+              "advanced/custom-materializers",
+              "advanced/dynamic-pipelines",
+              "advanced/resource-configuration",
+              "advanced/containerization"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/server-deployment",
+              "deployment/kubernetes",
+              "deployment/docker"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "AI Agents",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Agent Workflows",
             "pages": [
-              "api-reference/introduction"
+              "agents/overview",
+              "agents/orchestrating-agents",
+              "agents/agent-frameworks",
+              "agents/agent-evaluation"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Agent Examples",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "agents/examples/agent-comparison",
+              "agents/examples/deploying-agents",
+              "agents/examples/framework-integrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/pipeline",
+              "api/step",
+              "api/model",
+              "api/artifact-config",
+              "api/external-artifact"
+            ]
+          },
+          {
+            "group": "Context & Metadata",
+            "pages": [
+              "api/get-pipeline-context",
+              "api/get-step-context",
+              "api/log-metadata",
+              "api/log-artifact-metadata",
+              "api/log-model-metadata"
+            ]
+          },
+          {
+            "group": "Artifacts",
+            "pages": [
+              "api/save-artifact",
+              "api/load-artifact",
+              "api/register-artifact",
+              "api/link-artifact-to-model"
+            ]
+          },
+          {
+            "group": "Tags & Organization",
+            "pages": [
+              "api/add-tags",
+              "api/remove-tags",
+              "api/tag"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/unmapped",
+              "api/resource-settings",
+              "api/schedule"
+            ]
+          },
+          {
+            "group": "Stack Components",
+            "pages": [
+              "api/base-orchestrator",
+              "api/base-step",
+              "api/stack",
+              "api/stack-component"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "cli/overview",
+              "cli/init",
+              "cli/login",
+              "cli/pipeline",
+              "cli/stack",
+              "cli/integration",
+              "cli/deployment"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

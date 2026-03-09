@@ -1,0 +1,489 @@
+---
+title: "BaseStep"
+description: "Abstract base class for defining pipeline steps in ZenML."
+---
+
+## Overview
+
+The `BaseStep` is the fundamental building block of ZenML pipelines. Each step represents a discrete unit of work that processes inputs and produces outputs. Steps can be chained together to form complex ML workflows.
+
+## Class Definition
+
+```python
+from zenml.steps import BaseStep
+```
+
+### Inheritance
+
+- Abstract base class (ABC)
+- Subclassed by user-defined step classes or created via the `@step` decorator
+
+## Creating Steps
+
+There are two ways to create steps in ZenML:
+
+### Using the @step Decorator (Recommended)
+
+```python
+from zenml import step
+
+@step
+def my_step(input_data: int) -> int:
+    return input_data * 2
+```
+
+### Subclassing BaseStep
+
+```python
+from zenml.steps import BaseStep
+
+class MyStep(BaseStep):
+    def entrypoint(self, input_data: int) -> int:
+        return input_data * 2
+```
+
+## Initialization Parameters
+
+<ParamField path="name" type="str">
+  The name of the step. If not provided, defaults to the class name.
+</ParamField>
+
+<ParamField path="enable_cache" type="bool">
+  Whether to enable caching for this step. Cached steps skip execution if inputs haven't changed.
+</ParamField>
+
+<ParamField path="enable_artifact_metadata" type="bool">
+  Whether to enable artifact metadata collection for this step.
+</ParamField>
+
+<ParamField path="enable_artifact_visualization" type="bool">
+  Whether to enable automatic artifact visualization.
+</ParamField>
+
+<ParamField path="enable_step_logs" type="bool">
+  Whether to enable step logs.
+</ParamField>
+
+<ParamField path="experiment_tracker" type="str | bool">
+  Name of the experiment tracker to use, or False to disable.
+</ParamField>
+
+<ParamField path="step_operator" type="str | bool">
+  Name of the step operator to use for executing this step, or False to disable.
+</ParamField>
+
+<ParamField path="parameters" type="Dict[str, Any]">
+  Function parameters to pass to the step.
+</ParamField>
+
+<ParamField path="output_materializers" type="OutputMaterializersSpecification">
+  Materializers to use for step outputs. Can be a single materializer, a list, or a dict mapping output names to materializers.
+</ParamField>
+
+<ParamField path="environment" type="Dict[str, Any]">
+  Environment variables to set when running this step.
+</ParamField>
+
+<ParamField path="secrets" type="List[str | UUID]">
+  Secrets to make available as environment variables during step execution.
+</ParamField>
+
+<ParamField path="settings" type="Mapping[str, SettingsOrDict]">
+  Settings for this step, such as resource requirements.
+</ParamField>
+
+<ParamField path="extra" type="Dict[str, Any]">
+  Extra configurations for this step.
+</ParamField>
+
+<ParamField path="on_failure" type="HookSpecification">
+  Callback function to run if the step fails. Receives the exception as an argument.
+</ParamField>
+
+<ParamField path="on_success" type="HookSpecification">
+  Callback function to run if the step succeeds.
+</ParamField>
+
+<ParamField path="model" type="Model">
+  Model configuration for the Model Control Plane.
+</ParamField>
+
+<ParamField path="retry" type="StepRetryConfig">
+  Configuration for retrying the step on failure.
+</ParamField>
+
+<ParamField path="cache_policy" type="CachePolicyOrString">
+  Cache policy for this step.
+</ParamField>
+
+<ParamField path="runtime" type="StepRuntime">
+  The step runtime (inline, isolated, etc.). Only applicable for dynamic pipelines.
+</ParamField>
+
+<ParamField path="heartbeat_healthy_threshold" type="int" default="30">
+  Time in minutes before a step without heartbeat is considered unhealthy.
+</ParamField>
+
+<ParamField path="group" type="GroupInfo | str">
+  Group information for organizing related steps.
+</ParamField>
+
+## Abstract Method
+
+### entrypoint
+
+```python
+@abstractmethod
+def entrypoint(self, *args: Any, **kwargs: Any) -> Any:
+    """The core logic of the step."""
+```
+
+<ParamField path="*args" type="Any">
+  Positional arguments passed to the step.
+</ParamField>
+
+<ParamField path="**kwargs" type="Any">
+  Keyword arguments passed to the step.
+</ParamField>
+
+<ResponseField name="return" type="Any">
+  The output(s) of the step. Can be a single value, tuple of values, or dict.
+</ResponseField>
+
+<Note>
+  When using the `@step` decorator, the decorated function becomes the `entrypoint` method.
+</Note>
+
+## Core Methods
+
+### configure
+
+```python
+def configure(
+    self,
+    enable_cache: Optional[bool] = None,
+    enable_artifact_metadata: Optional[bool] = None,
+    # ... other parameters ...
+    merge: bool = True,
+) -> Self:
+    """Configures the step."""
+```
+
+Configure step behavior and settings. All parameters are the same as initialization parameters.
+
+<ParamField path="merge" type="bool" default="True">
+  If True, merges with existing configuration. If False, overwrites it.
+</ParamField>
+
+<ResponseField name="return" type="BaseStep">
+  Returns self for method chaining.
+</ResponseField>
+
+**Example:**
+
+```python
+step_instance.configure(
+    enable_cache=False,
+    parameters={"threshold": 0.95},
+    settings={"resources": {"cpu_count": 4}}
+)
+```
+
+### with_options
+
+```python
+def with_options(
+    self,
+    enable_cache: Optional[bool] = None,
+    # ... other parameters ...
+    merge: bool = True,
+) -> BaseStep:
+    """Creates a copy of the step with new configuration."""
+```
+
+<ResponseField name="return" type="BaseStep">
+  A new step instance with the updated configuration.
+</ResponseField>
+
+**Example:**
+
+```python
+# Original step
+original = my_step(data=input_data)
+
+# Create variant with different settings
+variant = my_step.with_options(
+    enable_cache=False,
+    name="my_step_no_cache"
+)(data=input_data)
+```
+
+### call_entrypoint
+
+```python
+def call_entrypoint(self, *args: Any, **kwargs: Any) -> Any:
+    """Directly calls the step's entrypoint function."""
+```
+
+<ResponseField name="return" type="Any">
+  The return value of the entrypoint function.
+</ResponseField>
+
+<Warning>
+  This method bypasses the normal ZenML pipeline execution flow and should only be used for testing.
+</Warning>
+
+## Dynamic Pipeline Methods
+
+These methods are only available within dynamic pipelines.
+
+### submit
+
+```python
+def submit(
+    self,
+    *args: Any,
+    id: Optional[str] = None,
+    after: Union[AnyStepFuture, Sequence[AnyStepFuture], None] = None,
+    **kwargs: Any,
+) -> StepFuture:
+    """Submits the step to run concurrently."""
+```
+
+<ParamField path="id" type="str">
+  Custom invocation ID for this step instance.
+</ParamField>
+
+<ParamField path="after" type="AnyStepFuture | Sequence[AnyStepFuture]">
+  Step futures to wait for before executing this step.
+</ParamField>
+
+<ResponseField name="return" type="StepFuture">
+  A future representing the submitted step execution.
+</ResponseField>
+
+**Example:**
+
+```python
+from zenml import pipeline, step
+
+@step
+def process_data(data: int) -> int:
+    return data * 2
+
+@pipeline(enable_cache=False)
+def dynamic_pipeline():
+    # Submit multiple steps concurrently
+    future1 = process_data.submit(data=1)
+    future2 = process_data.submit(data=2)
+    
+    # Results will be computed in parallel
+```
+
+### map
+
+```python
+def map(
+    self,
+    *args: Any,
+    after: Union[AnyStepFuture, Sequence[AnyStepFuture], None] = None,
+    **kwargs: Any,
+) -> MapResultsFuture:
+    """Maps the step over input sequences."""
+```
+
+<ResponseField name="return" type="MapResultsFuture">
+  A future representing the mapped step executions.
+</ResponseField>
+
+**Example:**
+
+```python
+from zenml import pipeline, step
+
+@step
+def create_data() -> list[int]:
+    return [1, 2, 3]
+
+@step
+def process(value: int) -> int:
+    return value * 2
+
+@pipeline(enable_cache=False)
+def map_pipeline():
+    data = create_data()
+    # Launches 3 separate process steps
+    results = process.map(value=data)
+```
+
+### product
+
+```python
+def product(
+    self,
+    *args: Any,
+    after: Union[AnyStepFuture, Sequence[AnyStepFuture], None] = None,
+    **kwargs: Any,
+) -> MapResultsFuture:
+    """Maps over the cartesian product of inputs."""
+```
+
+<ResponseField name="return" type="MapResultsFuture">
+  A future representing the product-mapped step executions.
+</ResponseField>
+
+**Example:**
+
+```python
+@step
+def create_numbers() -> list[int]:
+    return [1, 2]
+
+@step
+def create_letters() -> list[str]:
+    return ["a", "b"]
+
+@step
+def combine(num: int, letter: str) -> str:
+    return f"{num}{letter}"
+
+@pipeline(enable_cache=False)
+def product_pipeline():
+    numbers = create_numbers()
+    letters = create_letters()
+    # Launches 4 steps: (1,a), (1,b), (2,a), (2,b)
+    results = combine.product(num=numbers, letter=letters)
+```
+
+## Properties
+
+### name
+
+```python
+@property
+def name(self) -> str:
+    """The name of the step."""
+```
+
+### enable_cache
+
+```python
+@property
+def enable_cache(self) -> Optional[bool]:
+    """Whether caching is enabled for this step."""
+```
+
+### configuration
+
+```python
+@property
+def configuration(self) -> PartialStepConfiguration:
+    """The configuration of the step."""
+```
+
+### source_code
+
+```python
+@property
+def source_code(self) -> str:
+    """The source code of this step."""
+```
+
+### docstring
+
+```python
+@property
+def docstring(self) -> Optional[str]:
+    """The docstring of this step."""
+```
+
+## Complete Example
+
+```python
+from typing import Tuple
+from zenml import pipeline, step
+from zenml.config.retry_config import StepRetryConfig
+
+# Define a preprocessing step
+@step(
+    enable_cache=True,
+    settings={"resources": {"cpu_count": 2}}
+)
+def load_data(data_path: str) -> pd.DataFrame:
+    """Load data from a CSV file."""
+    return pd.read_csv(data_path)
+
+# Define a training step with retry logic
+@step(
+    retry=StepRetryConfig(max_retries=3, delay=60),
+    enable_artifact_metadata=True
+)
+def train_model(
+    data: pd.DataFrame,
+    learning_rate: float = 0.01
+) -> Tuple[Any, float]:
+    """Train a machine learning model."""
+    # Training logic
+    model = ...
+    accuracy = ...
+    return model, accuracy
+
+# Use in a pipeline
+@pipeline
+def training_pipeline(data_path: str, lr: float = 0.01):
+    data = load_data(data_path=data_path)
+    model, accuracy = train_model(
+        data=data,
+        learning_rate=lr
+    )
+
+# Configure step at runtime
+custom_step = train_model.with_options(
+    parameters={"learning_rate": 0.001},
+    settings={"resources": {"gpu_count": 1}}
+)
+
+@pipeline
+def custom_pipeline(data_path: str):
+    data = load_data(data_path=data_path)
+    model, accuracy = custom_step(data=data)
+```
+
+## Step Hooks
+
+Steps support failure and success hooks:
+
+```python
+def on_failure_handler(exception: BaseException) -> None:
+    """Called when step fails."""
+    print(f"Step failed with: {exception}")
+    # Send notification, log error, etc.
+
+def on_success_handler() -> None:
+    """Called when step succeeds."""
+    print("Step completed successfully!")
+
+@step(
+    on_failure=on_failure_handler,
+    on_success=on_success_handler
+)
+def monitored_step() -> str:
+    return "Success!"
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="BaseOrchestrator" href="/api/base-orchestrator" icon="network-wired">
+    Learn about orchestrators that execute steps
+  </Card>
+  <Card title="Stack" href="/api/stack" icon="layer-group">
+    Understand how steps run on stacks
+  </Card>
+  <Card title="Steps Guide" href="/user-guide/starter-guide/create-an-ml-pipeline" icon="book">
+    Guide to creating and using steps
+  </Card>
+  <Card title="Caching" href="/user-guide/advanced-guide/data-management/handle-data-artifacts/load-artifacts-into-memory" icon="database">
+    Learn about step caching
+  </Card>
+</CardGroup>
