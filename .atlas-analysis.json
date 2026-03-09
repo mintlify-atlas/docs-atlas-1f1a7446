@@ -1,0 +1,229 @@
+{
+  "projectType": "framework",
+  "projectName": "ZenML",
+  "projectDescription": "Production-ready MLOps framework for orchestrating ML pipelines and AI agents from development to deployment",
+  "theme": "aspen",
+  "primaryColor": "#c02979",
+  "lightColor": "#4d1d85",
+  "darkColor": "#ecdbea",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/pipelines",
+              "concepts/steps",
+              "concepts/artifacts",
+              "concepts/stacks",
+              "concepts/stack-components",
+              "concepts/models"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/pipelines/creating-pipelines",
+              "guides/pipelines/deploying-pipelines",
+              "guides/pipelines/scheduling-pipelines",
+              "guides/steps/writing-steps",
+              "guides/steps/step-context",
+              "guides/artifacts/artifact-management",
+              "guides/stacks/configuring-stacks",
+              "guides/stacks/stack-switching"
+            ]
+          },
+          {
+            "group": "Stack Components",
+            "pages": [
+              "components/overview",
+              "components/orchestrators",
+              "components/artifact-stores",
+              "components/container-registries",
+              "components/model-deployers",
+              "components/experiment-trackers",
+              "components/step-operators"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/aws",
+              "integrations/gcp",
+              "integrations/azure",
+              "integrations/kubernetes",
+              "integrations/kubeflow",
+              "integrations/mlflow",
+              "integrations/wandb",
+              "integrations/sagemaker",
+              "integrations/vertex-ai"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-orchestrators",
+              "advanced/custom-materializers",
+              "advanced/dynamic-pipelines",
+              "advanced/resource-configuration",
+              "advanced/containerization"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/server-deployment",
+              "deployment/kubernetes",
+              "deployment/docker"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "AI Agents",
+        "groups": [
+          {
+            "group": "Agent Workflows",
+            "pages": [
+              "agents/overview",
+              "agents/orchestrating-agents",
+              "agents/agent-frameworks",
+              "agents/agent-evaluation"
+            ]
+          },
+          {
+            "group": "Agent Examples",
+            "pages": [
+              "agents/examples/agent-comparison",
+              "agents/examples/deploying-agents",
+              "agents/examples/framework-integrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/pipeline",
+              "api/step",
+              "api/model",
+              "api/artifact-config",
+              "api/external-artifact"
+            ]
+          },
+          {
+            "group": "Context & Metadata",
+            "pages": [
+              "api/get-pipeline-context",
+              "api/get-step-context",
+              "api/log-metadata",
+              "api/log-artifact-metadata",
+              "api/log-model-metadata"
+            ]
+          },
+          {
+            "group": "Artifacts",
+            "pages": [
+              "api/save-artifact",
+              "api/load-artifact",
+              "api/register-artifact",
+              "api/link-artifact-to-model"
+            ]
+          },
+          {
+            "group": "Tags & Organization",
+            "pages": [
+              "api/add-tags",
+              "api/remove-tags",
+              "api/tag"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/unmapped",
+              "api/resource-settings",
+              "api/schedule"
+            ]
+          },
+          {
+            "group": "Stack Components",
+            "pages": [
+              "api/base-orchestrator",
+              "api/base-step",
+              "api/stack",
+              "api/stack-component"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "cli/overview",
+              "cli/init",
+              "cli/login",
+              "cli/pipeline",
+              "cli/stack",
+              "cli/integration",
+              "cli/deployment"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Pipeline orchestration with @pipeline and @step decorators",
+    "Stack-based infrastructure abstraction",
+    "69+ integrations with ML tools and cloud platforms",
+    "Built-in support for AI agents and LLM workflows",
+    "Automatic artifact tracking and versioning",
+    "Model registry and deployment management",
+    "Pipeline deployment as HTTP services",
+    "Client-server architecture with web dashboard",
+    "Kubernetes and cloud orchestrator support",
+    "Experiment tracking integration (MLflow, Weights & Biases)"
+  ],
+  "publicApiSurface": [
+    "zenml.pipeline",
+    "zenml.step",
+    "zenml.Model",
+    "zenml.ArtifactConfig",
+    "zenml.ExternalArtifact",
+    "zenml.get_pipeline_context",
+    "zenml.get_step_context",
+    "zenml.save_artifact",
+    "zenml.load_artifact",
+    "zenml.register_artifact",
+    "zenml.log_metadata",
+    "zenml.log_artifact_metadata",
+    "zenml.log_model_metadata",
+    "zenml.log_step_metadata",
+    "zenml.link_artifact_to_model",
+    "zenml.add_tags",
+    "zenml.remove_tags",
+    "zenml.Tag",
+    "zenml.unmapped",
+    "zenml.show",
+    "zenml CLI tool"
+  ]
+}
