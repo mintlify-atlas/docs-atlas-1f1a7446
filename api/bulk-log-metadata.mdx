@@ -1,0 +1,152 @@
+---
+title: "bulk_log_metadata"
+description: "Log metadata for multiple resources in a single call"
+---
+
+## Overview
+
+The `bulk_log_metadata()` function allows you to log metadata to multiple ZenML resources (steps, artifacts, models) in a single efficient call. This is useful when you need to attach the same metadata to multiple entities.
+
+## Signature
+
+```python
+from zenml import bulk_log_metadata
+
+def bulk_log_metadata(
+    metadata: Dict[str, MetadataType],
+    resources: List[RunMetadataResource],
+) -> None:
+    """Log metadata for multiple resources at once.
+    
+    Args:
+        metadata: Dictionary of metadata key-value pairs to log
+        resources: List of resources to attach metadata to
+    """
+```
+
+## Parameters
+
+<ParamField path="metadata" type="Dict[str, MetadataType]" required>
+  Dictionary of metadata key-value pairs. Values can be:
+  - Primitive types: `str`, `int`, `float`, `bool`
+  - URI: `Uri` type for file/resource references
+  - Structured data: `dict`, `list`
+</ParamField>
+
+<ParamField path="resources" type="List[RunMetadataResource]" required>
+  List of ZenML resources to attach metadata to. Each resource specifies:
+  - Resource type (step, artifact, model)
+  - Resource identifier (ID or name)
+</ParamField>
+
+## Return Value
+
+<ResponseField name="return" type="None">
+  This function does not return a value. Metadata is logged to the ZenML server.
+</ResponseField>
+
+## Usage Examples
+
+### Log Metadata to Multiple Artifacts
+
+```python
+from zenml import bulk_log_metadata
+from zenml.models import RunMetadataResource
+from zenml.enums import MetadataResourceTypes
+
+# Log experiment metadata to multiple artifacts
+metadata = {
+    "experiment_id": "exp-2024-001",
+    "accuracy": 0.95,
+    "framework": "pytorch"
+}
+
+resources = [
+    RunMetadataResource(
+        type=MetadataResourceTypes.ARTIFACT_VERSION,
+        id="artifact-id-1"
+    ),
+    RunMetadataResource(
+        type=MetadataResourceTypes.ARTIFACT_VERSION,
+        id="artifact-id-2"
+    ),
+]
+
+bulk_log_metadata(metadata=metadata, resources=resources)
+```
+
+### Log Training Metadata to Step and Model
+
+```python
+from zenml import bulk_log_metadata, get_step_context
+from zenml.models import RunMetadataResource
+from zenml.enums import MetadataResourceTypes
+
+# Inside a step
+context = get_step_context()
+
+training_metadata = {
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 10,
+    "optimizer": "adam"
+}
+
+# Log to both the current step and the model
+resources = [
+    RunMetadataResource(
+        type=MetadataResourceTypes.STEP_RUN,
+        id=context.step_run.id
+    ),
+    RunMetadataResource(
+        type=MetadataResourceTypes.MODEL_VERSION,
+        id=context.model.id
+    ),
+]
+
+bulk_log_metadata(metadata=training_metadata, resources=resources)
+```
+
+## When to Use
+
+<CardGroup cols={2}>
+  <Card title="Use bulk_log_metadata When" icon="check">
+    - Logging the same metadata to multiple resources
+    - Attaching experiment metadata to all artifacts
+    - Tagging multiple entities with common information
+    - Optimizing metadata logging performance
+  </Card>
+  <Card title="Use log_metadata When" icon="info">
+    - Logging to a single resource
+    - Different metadata for each resource
+    - Using convenience parameters (infer_model, etc.)
+    - Simpler use cases
+  </Card>
+</CardGroup>
+
+## Related Functions
+
+<CardGroup cols={2}>
+  <Card title="log_metadata" href="/api/log-metadata" icon="tag">
+    Log metadata to a single resource
+  </Card>
+  <Card title="log_artifact_metadata" href="/api/log-artifact-metadata" icon="box">
+    Specialized function for artifact metadata
+  </Card>
+  <Card title="log_model_metadata" href="/api/log-model-metadata" icon="cube">
+    Specialized function for model metadata
+  </Card>
+  <Card title="log_step_metadata" href="/api/log-step-metadata" icon="stairs">
+    Specialized function for step metadata
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Note>
+  `bulk_log_metadata()` is more efficient than calling `log_metadata()` multiple times when you need to attach the same metadata to multiple resources.
+</Note>
+
+<Info>
+  All resources must exist in the ZenML database before logging metadata. Use valid IDs or identifiers for each resource.
+</Info>

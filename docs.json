@@ -149,8 +149,10 @@
               "api/get-pipeline-context",
               "api/get-step-context",
               "api/log-metadata",
+              "api/bulk-log-metadata",
               "api/log-artifact-metadata",
-              "api/log-model-metadata"
+              "api/log-model-metadata",
+              "api/log-step-metadata"
             ]
           },
           {
@@ -175,7 +177,8 @@
             "pages": [
               "api/unmapped",
               "api/resource-settings",
-              "api/schedule"
+              "api/schedule",
+              "api/show"
             ]
           },
           {

@@ -1,0 +1,205 @@
+---
+title: "log_step_metadata"
+description: "Log metadata to step runs during pipeline execution"
+---
+
+## Overview
+
+The `log_step_metadata()` function allows you to attach metadata to step runs during pipeline execution. This is particularly useful for logging metrics, parameters, or custom tracking information from within your steps.
+
+## Signature
+
+```python
+from zenml import log_step_metadata
+
+def log_step_metadata(
+    metadata: Dict[str, MetadataType],
+    step_name: Optional[str] = None,
+) -> None:
+    """Log metadata to a step run.
+    
+    Args:
+        metadata: Dictionary of metadata key-value pairs to log
+        step_name: Name of the step (uses current step if not provided)
+    """
+```
+
+## Parameters
+
+<ParamField path="metadata" type="Dict[str, MetadataType]" required>
+  Dictionary of metadata key-value pairs to log. Supported value types:
+  - Primitives: `str`, `int`, `float`, `bool`
+  - URI: `Uri` for file/resource references
+  - Structured: `dict`, `list`
+</ParamField>
+
+<ParamField path="step_name" type="str" default="None">
+  Name of the step to log metadata to. If not provided, logs to the currently executing step.
+</ParamField>
+
+## Return Value
+
+<ResponseField name="return" type="None">
+  This function does not return a value. Metadata is logged to the ZenML server and associated with the step run.
+</ResponseField>
+
+## Usage Examples
+
+### Log Metrics During Training
+
+```python
+from zenml import step, log_step_metadata
+import time
+
+@step
+def train_model(data: dict) -> str:
+    """Train a model and log metrics."""
+    start_time = time.time()
+    
+    # Training logic here
+    accuracy = 0.95
+    loss = 0.12
+    
+    # Log training metrics
+    log_step_metadata(
+        metadata={
+            "accuracy": accuracy,
+            "loss": loss,
+            "training_time_seconds": time.time() - start_time,
+            "num_samples": len(data),
+        }
+    )
+    
+    return "model_v1"
+```
+
+### Log Hyperparameters
+
+```python
+from zenml import step, log_step_metadata
+
+@step
+def train_model(learning_rate: float = 0.001, batch_size: int = 32) -> str:
+    """Train with hyperparameters."""
+    
+    # Log hyperparameters at the start
+    log_step_metadata(
+        metadata={
+            "learning_rate": learning_rate,
+            "batch_size": batch_size,
+            "optimizer": "adam",
+            "activation": "relu",
+        }
+    )
+    
+    # Training logic
+    model = train(...)
+    
+    return model
+```
+
+### Log Data Quality Metrics
+
+```python
+from zenml import step, log_step_metadata
+
+@step
+def validate_data(dataset: dict) -> dict:
+    """Validate dataset and log quality metrics."""
+    
+    # Calculate data quality metrics
+    missing_values = dataset.isnull().sum()
+    duplicates = dataset.duplicated().sum()
+    total_rows = len(dataset)
+    
+    log_step_metadata(
+        metadata={
+            "total_rows": total_rows,
+            "missing_values": int(missing_values),
+            "duplicate_rows": int(duplicates),
+            "data_quality_score": 0.98,
+        }
+    )
+    
+    return dataset
+```
+
+### Log from Different Steps
+
+```python
+from zenml import pipeline, step, log_step_metadata
+
+@step
+def preprocess_data() -> dict:
+    data = {"processed": True}
+    log_step_metadata(
+        metadata={"preprocessing_version": "v2.1"},
+        step_name="preprocess_data"
+    )
+    return data
+
+@step
+def train_model(data: dict) -> str:
+    # Can log to a different step
+    log_step_metadata(
+        metadata={"data_source": "upstream"},
+        step_name="preprocess_data"
+    )
+    return "model"
+```
+
+## Metadata Types
+
+ZenML supports various metadata types:
+
+<Accordion title="Supported Metadata Types">
+  - **Primitives**: `str`, `int`, `float`, `bool`
+  - **URI**: `Uri` for file paths and URLs
+  - **Storage Size**: `StorageSize` for byte sizes
+  - **Structured**: `dict`, `list` for complex data
+  - **Custom**: Any JSON-serializable type
+</Accordion>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Log Early" icon="clock">
+    Log hyperparameters and config at the start of your step for complete tracking
+  </Card>
+  <Card title="Use Descriptive Keys" icon="tag">
+    Use clear, consistent naming for metadata keys (e.g., "training_accuracy" not "acc")
+  </Card>
+  <Card title="Log Incrementally" icon="layer-group">
+    You can call log_step_metadata multiple times - metadata is accumulated
+  </Card>
+  <Card title="Track Versions" icon="code-branch">
+    Log versions of data, models, and dependencies for reproducibility
+  </Card>
+</CardGroup>
+
+## Related Functions
+
+<CardGroup cols={3}>
+  <Card title="log_metadata" href="/api/log-metadata" icon="tag">
+    General metadata logging function
+  </Card>
+  <Card title="log_artifact_metadata" href="/api/log-artifact-metadata" icon="box">
+    Log metadata to artifacts
+  </Card>
+  <Card title="log_model_metadata" href="/api/log-model-metadata" icon="cube">
+    Log metadata to models
+  </Card>
+  <Card title="get_step_context" href="/api/get-step-context" icon="info">
+    Access step context information
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Note>
+  Metadata logged with `log_step_metadata()` is visible in the ZenML dashboard and can be used for filtering, searching, and comparing step runs.
+</Note>
+
+<Info>
+  If you call `log_step_metadata()` multiple times within the same step, the metadata is accumulated (not replaced).
+</Info>

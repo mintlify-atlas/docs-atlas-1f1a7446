@@ -1,0 +1,213 @@
+---
+title: "show"
+description: "Open the ZenML dashboard in your browser"
+---
+
+## Overview
+
+The `show()` function (aliased as `show_dashboard`) opens the ZenML dashboard in your default web browser. This provides quick access to the ZenML UI for viewing pipelines, artifacts, models, and more.
+
+## Signature
+
+```python
+from zenml import show
+
+def show(
+    local: bool = False,
+    ngrok_token: Optional[str] = None,
+) -> None:
+    """Open the ZenML dashboard in your browser.
+    
+    Args:
+        local: Whether to show local server dashboard
+        ngrok_token: Token for exposing dashboard via ngrok
+    """
+```
+
+## Parameters
+
+<ParamField path="local" type="bool" default="False">
+  If `True`, shows the dashboard for the local ZenML server. If `False`, shows the dashboard for the currently active server (could be remote).
+</ParamField>
+
+<ParamField path="ngrok_token" type="str" default="None">
+  An ngrok authentication token to expose the ZenML dashboard on a public domain. Primarily useful for accessing the dashboard in cloud notebooks like Google Colab.
+</ParamField>
+
+## Return Value
+
+<ResponseField name="return" type="None">
+  This function does not return a value. It opens the dashboard in your default web browser.
+</ResponseField>
+
+## Usage Examples
+
+### Open Active Server Dashboard
+
+```python
+from zenml import show
+
+# Open the dashboard for the currently active server
+show()
+```
+
+### Open Local Server Dashboard
+
+```python
+from zenml import show
+
+# Explicitly open the local server dashboard
+show(local=True)
+```
+
+### Use in Jupyter Notebooks
+
+```python
+from zenml import show
+
+# After running a pipeline
+training_pipeline()
+
+# View results in the dashboard
+show()
+```
+
+### Expose Dashboard with ngrok
+
+```python
+from zenml import show
+
+# Useful in Google Colab or cloud notebooks
+show(ngrok_token="your_ngrok_auth_token")
+```
+
+### Quick Pipeline Debugging
+
+```python
+from zenml import pipeline, step, show
+
+@step
+def train_model() -> str:
+    return "model_v1"
+
+@pipeline
+def training_pipeline():
+    model = train_model()
+
+if __name__ == "__main__":
+    # Run pipeline
+    training_pipeline()
+    
+    # Open dashboard to view results
+    show()
+```
+
+## Dashboard Features
+
+When you open the dashboard, you can:
+
+<CardGroup cols={2}>
+  <Card title="View Pipeline Runs" icon="diagram-project">
+    See all pipeline executions with status, duration, and artifacts
+  </Card>
+  <Card title="Explore Artifacts" icon="box">
+    Browse artifacts with lineage, metadata, and visualizations
+  </Card>
+  <Card title="Monitor Models" icon="cube">
+    Track model versions, stages, and performance metrics
+  </Card>
+  <Card title="Manage Stacks" icon="layer-group">
+    Configure and switch between different infrastructure stacks
+  </Card>
+  <Card title="View DAGs" icon="sitemap">
+    Visualize pipeline structure and step dependencies
+  </Card>
+  <Card title="Compare Runs" icon="chart-line">
+    Compare metrics and parameters across multiple runs
+  </Card>
+</CardGroup>
+
+## Server Connection
+
+The `show()` function requires an active connection to a ZenML server:
+
+<Steps>
+  <Step title="Check Connection">
+    Verify you're connected to a server:
+    ```bash
+    zenml status
+    ```
+  </Step>
+  <Step title="Connect to Server">
+    If not connected, login to a server:
+    ```bash
+    # Local server
+    zenml login --local
+    
+    # Remote server
+    zenml login https://your-server.com
+    ```
+  </Step>
+  <Step title="Open Dashboard">
+    Now you can use the show() function:
+    ```python
+    from zenml import show
+    show()
+    ```
+  </Step>
+</Steps>
+
+## Errors
+
+<Accordion title="RuntimeError: Not connected to any server">
+  This error occurs when ZenML is not connected to any server. Fix by running:
+  ```bash
+  zenml login --local
+  ```
+</Accordion>
+
+<Accordion title="Dashboard doesn't open">
+  - Check your default browser settings
+  - The dashboard URL is still printed to console - copy and paste manually
+  - Verify the server is running: `zenml status`
+</Accordion>
+
+## CLI Alternative
+
+You can also open the dashboard via CLI:
+
+```bash
+# Show active server dashboard
+zenml show
+
+# Show local server dashboard
+zenml show --local
+```
+
+## Related Functions
+
+<CardGroup cols={3}>
+  <Card title="get_pipeline_context" href="/api/get-pipeline-context" icon="diagram-project">
+    Access pipeline information programmatically
+  </Card>
+  <Card title="get_step_context" href="/api/get-step-context" icon="stairs">
+    Access step information in code
+  </Card>
+  <Card title="CLI: zenml show" href="/cli/login" icon="terminal">
+    Command-line dashboard access
+  </Card>
+</CardGroup>
+
+## Notes
+
+<Note>
+  The `show()` function is aliased as `show_dashboard` in the ZenML imports. Both names work identically.
+</Note>
+
+<Info>
+  In cloud notebook environments (Colab, Databricks), use the `ngrok_token` parameter to expose the dashboard via a public URL.
+</Info>
+
+<Warning>
+  The ngrok token should be kept secure. Don't commit it to version control or share it publicly.
+</Warning>
